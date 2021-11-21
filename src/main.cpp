@@ -3,6 +3,7 @@
 #include "vigor/text_layer.h"
 #include "vigor/window.h"
 
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -23,19 +24,31 @@ ExampleLayer base_layer;
 TextLayer text_layer;
 
 void cursor_pos_changed(double x_pos, double y_pos) {
-    std::ostringstream text;
-    text << "X: " << x_pos << " Y: " << y_pos << std::endl << "Newline test";
-    text_layer.set_text(text.str());
-    text_layer.set_position(
-        x_pos * Window::width,
-        (1.0f - y_pos) * Window::height);
+    text_layer.set_position(x_pos, y_pos);
 }
 
 void window_size_changed(int new_width, int new_height) {
     std::cout << "W: " << new_width << " H: " << new_height << std::endl;
 }
 
+void key_event(int key, int scancode, int action, int mods) {
+    std::cout << "Key: " << static_cast<unsigned int>(scancode) << std::endl;
+    text_layer.update();
+}
+
 int main(int argc, char **argv) {
+    std::string full_text;
+    std::string line;
+
+    std::ifstream myfile("test.txt");
+    if (myfile.is_open()) {
+        while (getline(myfile, line)) {
+            full_text.append(line);
+            full_text.append("\n");
+        }
+        myfile.close();
+    }
+
     // Attach the window to the engine
     engine.attach(&window);
 
@@ -47,14 +60,15 @@ int main(int argc, char **argv) {
     // Register some callbacks
     window.register_cursor_pos_fn(cursor_pos_changed);
     window.register_window_size_fn(window_size_changed);
-
-    text_layer.set_position(25.0f, 125.0f);
-    text_layer.set_char(0, 0, 'X');
-    text_layer.set_char(0, 1, 'Y');
-    text_layer.set_char(2, 1, 'Z');
+    window.register_key_event_fn(key_event);
 
     // Startup the window, compiling the shaders and initializing buffers
     window.startup();
+
+    // Handle all positioning after startup, once the window's dimensions
+    // have been determined
+    text_layer.set_text(full_text);
+    text_layer.set_position(0.0f, 0.0f);
 
     // Start the window's main loop
     window.main_loop();

@@ -4,8 +4,15 @@ out vec4 color;
 
 uniform sampler2D text;
 uniform vec3 textColor;
+uniform float animationProgress;
 
 void main() {
+    vec4 fg = vec4(textColor, 1.0);
+    vec4 bg = vec4(1.0f - textColor.xyz, 1.0);
+
     vec4 sampled = vec4(1.0, 1.0, 1.0, texture(text, TexCoords).r);
-    color = vec4(textColor, 1.0) * sampled;
+    color = mix(
+        mix(bg, fg, animationProgress),
+        mix(fg, bg, animationProgress),
+    texture(text, TexCoords).r);
 }

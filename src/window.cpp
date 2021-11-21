@@ -28,6 +28,7 @@ Window::~Window() {
 
 void (*Window::cursor_pos)(double x_pos, double y_pos) = NULL;
 void (*Window::window_size)(int width, int height) = NULL;
+void (*Window::key_event)(int key, int scancode, int action, int mods) = NULL;
 
 int Window::width = 0;
 int Window::height = 0;
@@ -51,6 +52,14 @@ void Window::global_window_size_callback(GLFWwindow *window, int width, int heig
     Window::window_size(width, height);
 }
 
+void Window::global_key_event_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+    } else {
+        Window::key_event(key, scancode, action, mods);
+    }
+}
+
 void Window::register_cursor_pos_fn(void (*fp)(double x_pos, double y_pos)) {
     Window::cursor_pos = fp;
 }
@@ -59,9 +68,8 @@ void Window::register_window_size_fn(void (*fp)(int width, int height)) {
     Window::window_size = fp;
 }
 
-static void glfw_key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
+void Window::register_key_event_fn(void (*fp)(int key, int scancode, int action, int mods)) {
+    Window::key_event = fp;
 }
 
 static void glfw_error_callback(int error, const char *description) {
@@ -92,7 +100,7 @@ bool Window::startup() {
         return false;
     }
 
-    glfwSetKeyCallback(this->win, glfw_key_callback);
+    glfwSetKeyCallback(this->win, Window::global_key_event_callback);
     glfwSetCursorPosCallback(this->win, Window::global_cursor_pos_callback);
     glfwSetWindowSizeCallback(this->win, Window::global_window_size_callback);
 
@@ -101,7 +109,6 @@ bool Window::startup() {
     glfwSwapInterval(1);
 
     glEnable(GL_BLEND);
-    //glEnable(GL_DEPTH_TEST);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // Shader compilation is deferred

@@ -11,18 +11,16 @@
 #include "vigor/window.h"
 
 #include <cmath>
+#include <cstring>
 #include <iostream>
 #include <map>
 #include <string>
 
-using std::string;
+// TODO: Remove after testing
+#include <chrono>
+using namespace std::chrono;
 
-struct Character {
-    unsigned int texture_id; // ID handle of the glyph texture
-    glm::ivec2   size;      // Size of glyph
-    glm::ivec2   bearing;   // Offset from baseline to left/top of glyph
-    unsigned int advance;   // Horizontal offset to advance to next glyph
-};
+using std::string;
 
 std::map<GLchar, Character> characters;
 
@@ -108,6 +106,8 @@ void TextLayer::setup() {
     glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+
+    this->update();
 }
 
 TextLayer::~TextLayer() {
@@ -117,22 +117,91 @@ TextLayer::~TextLayer() {
 
 void TextLayer::set_text(string text) {
     this->text = text;
+    this->update();
 }
 
 void TextLayer::set_position(float x, float y) {
-    this->x = x;
-    this->y = y;
+    this->x = x * Window::width;
+    this->y = (1.0f - y) * Window::height - this->scale * this->char_height;
+    this->recalculate_visibility();
 }
 
-void TextLayer::set_char(int row, int col, char ch) {
+void TextLayer::recalculate_visibility() {
 }
 
-void TextLayer::draw() {
+void TextLayer::recalculate_visibility_2() {
+    auto start = high_resolution_clock::now();
+
     float x = this->x;
     float y = this->y;
 
-    float scale = 0.5f;
-    glm::vec3 color(0.5, 0.8f, 0.2f);
+    // Iterate through all characters
+    bool invisible_until_eol = false;
+    bool invisible_until_eof = false;
+    for (int i = 0; i < this->text.size(); ++i) {
+        char c = this->text[i];
+        Character ch = characters[c];
+        bool visible = true;
+
+        float x_pos = x + ch.bearing.x * this->scale;
+        float y_pos = y - (ch.size.y - ch.bearing.y) * this->scale;
+
+        float w = ch.size.x * this->scale;
+        float h = ch.size.y * this->scale;
+
+        if (x_pos > Window::width) {
+            invisible_until_eol = true;
+            visible = false;
+        }
+
+        if (y_pos > Window::height) {
+            visible = false;
+        }
+
+        if ((y_pos + ch.bearing.y) < 0) {
+            invisible_until_eof = true;
+        }
+
+        if (c == '\n' and invisible_until_eof) {
+            for (int j = i; j < this->geometry.size(); ++j)
+                this->geometry[j].visible = false;
+            break;
+        }
+
+        if (c == '\n') {
+            invisible_until_eol = false;
+            x = this->x;
+            y -= this->char_height * this->scale;
+        } else if (c == '\r') {
+            x = this->x;
+        } else {
+            // Advance cursors for next glyph (note that advance is number of 1/64 pixels)
+            x += (ch.advance >> 6) * this->scale; // bitshift by 6 to get value in pixels (2^6 = 64)
+        }
+
+        // Update VBO for each character
+        float verts[6][4] = {
+            { x_pos,     y_pos + h,   0.0f, 0.0f },
+            { x_pos,     y_pos,       0.0f, 1.0f },
+            { x_pos + w, y_pos,       1.0f, 1.0f },
+
+            { x_pos,     y_pos + h,   0.0f, 0.0f },
+            { x_pos + w, y_pos,       1.0f, 1.0f },
+            { x_pos + w, y_pos + h,   1.0f, 0.0f }
+        };
+
+        memcpy(&this->geometry[i].vertices, verts, 6 * 4 * sizeof(float));
+        this->geometry[i].visible = invisible_until_eol ? false : visible;
+    }
+
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<microseconds>(stop - start);
+    std::cout << "recalculate_visibility took " << duration.count() << "µs" << std::endl;
+}
+
+void TextLayer::update() {
+    float x = this->x;
+    float y = this->y;
 
     glm::mat4 projection = glm::ortho(
         0.0f,
@@ -142,52 +211,92 @@ void TextLayer::draw() {
     );
     glUniformMatrix4fv(glGetUniformLocation(this->shader_id, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 
-    glUniform3fv(glGetUniformLocation(this->shader_id, "textColor"), 1, glm::value_ptr(color));
-    glActiveTexture(GL_TEXTURE0);
-    glBindVertexArray(VAO);
+    this->geometry.clear();
 
     // Iterate through all characters
     std::string::const_iterator c;
     for (c = this->text.begin(); c != this->text.end(); ++c) {
         Character ch = characters[*c];
+        bool visible = true;
+
+        float x_pos = x + ch.bearing.x * this->scale;
+        float y_pos = y - (ch.size.y - ch.bearing.y) * this->scale;
+
+        float w = ch.size.x * this->scale;
+        float h = ch.size.y * this->scale;
+
+        if (y_pos > Window::height || x_pos > Window::width) {
+            visible = false;
+        }
+
+        if ((y_pos + ch.bearing.y) < 0) {
+            visible = false;
+        }
 
         if (*c == '\n') {
-            y -= this->char_height * scale;
             x = this->x;
+            y -= this->char_height * this->scale;
         } else if (*c == '\r') {
             x = this->x;
         } else {
-            float x_pos = x + ch.bearing.x * scale;
-            float y_pos = y - (ch.size.y - ch.bearing.y) * scale;
-
-            float w = ch.size.x * scale;
-            float h = ch.size.y * scale;
-
             // Update VBO for each character
-            float vertices[6][4] = {
-                { x_pos,     y_pos + h,   0.0f, 0.0f },
-                { x_pos,     y_pos,       0.0f, 1.0f },
-                { x_pos + w, y_pos,       1.0f, 1.0f },
+            CharacterGeometry cg = {
+                {
+                    { x_pos,     y_pos + h,   0.0f, 0.0f },
+                    { x_pos,     y_pos,       0.0f, 1.0f },
+                    { x_pos + w, y_pos,       1.0f, 1.0f },
 
-                { x_pos,     y_pos + h,   0.0f, 0.0f },
-                { x_pos + w, y_pos,       1.0f, 1.0f },
-                { x_pos + w, y_pos + h,   1.0f, 0.0f }
+                    { x_pos,     y_pos + h,   0.0f, 0.0f },
+                    { x_pos + w, y_pos,       1.0f, 1.0f },
+                    { x_pos + w, y_pos + h,   1.0f, 0.0f }
+                },
+                ch.texture_id,
+                visible
             };
 
-            // Render glyph texture over quad
-            glBindTexture(GL_TEXTURE_2D, ch.texture_id);
-
-            // Update content of VBO memory
-            glBindBuffer(GL_ARRAY_BUFFER, VBO);
-            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
-            glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-            // Render quad
-            glDrawArrays(GL_TRIANGLES, 0, 6);
+            this->geometry.push_back(cg);
 
             // Advance cursors for next glyph (note that advance is number of 1/64 pixels)
-            x += (ch.advance >> 6) * scale; // bitshift by 6 to get value in pixels (2^6 = 64)
+            x += (ch.advance >> 6) * this->scale; // bitshift by 6 to get value in pixels (2^6 = 64)
         }
+    }
+}
+
+void TextLayer::draw() {
+    glm::vec3 color(0.5, 0.8f, 0.2f);
+
+    glUniform3fv(glGetUniformLocation(this->shader_id, "textColor"), 1, glm::value_ptr(color));
+
+    glActiveTexture(GL_TEXTURE0);
+
+    float time_val = glfwGetTime();
+    float green_val = sin(time_val) / 2.0f + 0.5f;
+    glUniform1f(glGetUniformLocation(this->shader_id, "animationProgress"), green_val);
+
+    glm::mat4 projection = glm::ortho(
+        0.0f,
+        static_cast<float>(Window::width),
+        0.0f,
+        static_cast<float>(Window::height)
+    );
+    glUniformMatrix4fv(glGetUniformLocation(this->shader_id, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+    glBindVertexArray(this->VAO);
+
+    for (CharacterGeometry cg : this->geometry) {
+        if (!cg.visible)
+            continue;
+
+        // Render glyph texture over quad
+        glBindTexture(GL_TEXTURE_2D, cg.texture_id);
+
+        // Update content of VBO memory
+        glBindBuffer(GL_ARRAY_BUFFER, this->VBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(cg.vertices), cg.vertices);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+        // Render quad
+        glDrawArrays(GL_TRIANGLES, 0, 6);
     }
 
     glBindVertexArray(0);
