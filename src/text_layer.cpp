@@ -1,6 +1,7 @@
 #define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
 #include <glad/glad.h>
+#include <GLFW/glfw3.h>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
@@ -8,6 +9,7 @@
 #include FT_FREETYPE_H
 
 #include "vigor/text_layer.h"
+#include "vigor/text_renderer.h"
 #include "vigor/window.h"
 
 #include <cmath>
@@ -25,6 +27,13 @@ using std::string;
 std::map<GLchar, Character> characters;
 
 void TextLayer::setup() {
+    this->renderer.set_font(
+            "/Users/ldonovan/Library/Fonts/Blex Mono Medium Nerd Font Complete Mono.ttf",
+            this->char_height);
+    this->renderer.load();
+
+    return;
+
     FT_Library ft;
     // All functions return a value different than 0 whenever an error occurred
     if (FT_Init_FreeType(&ft)) {

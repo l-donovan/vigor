@@ -2,19 +2,13 @@
 #include <glm/glm.hpp>
 
 #include "layer.h"
+#include "text_renderer.h"
 
 #include <string>
 #include <vector>
 
 using std::string;
 using std::vector;
-
-struct Character {
-    unsigned int texture_id; // ID handle of the glyph texture
-    glm::ivec2   size;      // Size of glyph
-    glm::ivec2   bearing;   // Offset from baseline to left/top of glyph
-    unsigned int advance;   // Horizontal offset to advance to next glyph
-};
 
 struct CharacterGeometry {
     float vertices[6][4];
@@ -30,6 +24,7 @@ class TextLayer : public Layer {
         float x, y;
         string text;
         vector<CharacterGeometry> geometry;
+        TextRenderer renderer;
     public:
         ~TextLayer();
 
