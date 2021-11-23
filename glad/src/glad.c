@@ -2440,7 +2440,6 @@ static void load_GL_ARB_copy_image(GLADloadproc load) {
 static int find_extensionsGL(void) {
 	if (!get_exts()) return 0;
 	GLAD_GL_ARB_copy_image = has_ext("GL_ARB_copy_image");
-    printf("%d\n", GLAD_GL_ARB_copy_image);
 	free_exts();
 	return 1;
 }

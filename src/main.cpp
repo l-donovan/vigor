@@ -37,18 +37,6 @@ void key_event(int key, int scancode, int action, int mods) {
 }
 
 int main(int argc, char **argv) {
-    std::string full_text;
-    std::string line;
-
-    std::ifstream myfile("test.txt");
-    if (myfile.is_open()) {
-        while (getline(myfile, line)) {
-            full_text.append(line);
-            full_text.append("\n");
-        }
-        myfile.close();
-    }
-
     // Attach the window to the engine
     engine.attach(&window);
 
@@ -67,7 +55,8 @@ int main(int argc, char **argv) {
 
     // Handle all positioning after startup, once the window's dimensions
     // have been determined
-    text_layer.set_text(full_text);
+    text_layer.set_font("C:\\Windows\\Fonts\\IBMPlexMono-Regular.ttf", 24);
+    text_layer.set_text("My name is \"Luke Donovan\"!");
     text_layer.set_position(0.0f, 0.0f);
 
     // Start the window's main loop

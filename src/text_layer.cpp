@@ -6,17 +6,19 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <ft2build.h>
+#include <freetype/ftlcdfil.h>
 #include FT_FREETYPE_H
 
 #include "vigor/text_layer.h"
-#include "vigor/text_renderer.h"
 #include "vigor/window.h"
 
 #include <cmath>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <string>
+#include <vector>
 
 // TODO: Remove after testing
 #include <chrono>
@@ -27,50 +29,88 @@ using std::string;
 std::map<GLchar, Character> characters;
 
 void TextLayer::setup() {
-    this->renderer.set_font(
-            "/Users/ldonovan/Library/Fonts/Blex Mono Medium Nerd Font Complete Mono.ttf",
-            this->char_height);
-    this->renderer.load();
+    glGenBuffers(1, &this->vbo_vertices);
+    glGenBuffers(1, &this->vbo_uvs);
+    glGenBuffers(1, &this->vbo_colors);
+    glGenBuffers(1, &this->ibo_faces);
+}
 
-    return;
+void TextLayer::set_font(string font_path, int font_height) {
+    this->font_path = font_path;
+    this->font_height = font_height;
+    this->load();
+}
 
+bool TextLayer::load() {
     FT_Library ft;
-    // All functions return a value different than 0 whenever an error occurred
+
     if (FT_Init_FreeType(&ft)) {
-        std::cout << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
-        return;
+        std::cerr << "Could not initialize FreeType library" << std::endl;
+        return false;
     }
 
-    // Find path to font
-    string font_name = "/Users/ldonovan/Library/Fonts/Blex Mono Medium Nerd Font Complete Mono.ttf";
-    if (font_name.empty()) {
-        std::cout << "ERROR::FREETYPE: Failed to load font_name" << std::endl;
-        return;
+    if (this->font_path.empty()) {
+        std::cerr << "Font path is unset" << std::endl;
+        return false;
     }
 
-    // Load font as face
     FT_Face face;
-    if (FT_New_Face(ft, font_name.c_str(), 0, &face)) {
-        std::cout << "ERROR::FREETYPE: Failed to load font" << std::endl;
-        return;
-    } else {
-        // set size to load glyphs as
-        FT_Set_Pixel_Sizes(face, 0, this->char_height);
+    if (FT_New_Face(ft, this->font_path.c_str(), 0, &face)) {
+        std::cerr << "Failed to load font" << std::endl;
+        return false;
+    }
 
-        // disable byte-alignment restriction
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    FT_Set_Pixel_Sizes(face, 0, this->font_height);
 
-        // load first 128 characters of ASCII set
-        for (unsigned char c = 0; c < 128; c++) {
-            // Load character glyph
-            if (FT_Load_Char(face, c, FT_LOAD_RENDER)) {
-                std::cout << "ERROR::FREETYTPE: Failed to load Glyph" << std::endl;
-                continue;
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    unsigned int char_count = 128;
+    GLuint* char_textures = (GLuint*)malloc(char_count * sizeof(GLuint));
+
+    unsigned int current_width = 0;
+    unsigned int atlas_width = 0;
+    unsigned int atlas_height = 0;
+    unsigned int total_height = 0;
+    unsigned int limit_width = 512;
+
+    // Load ASCII charset
+    for (unsigned char c = 0; c < char_count; ++c) {
+        if (FT_Load_Char(face, c, FT_LOAD_RENDER)) {
+            std::cerr << "Failed to load glyph #" << static_cast<unsigned int>(c) << std::endl;
+            continue;
+        }
+
+        Character character;
+        GLuint texture;
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+
+        if (!FT_Get_Char_Index(face, c)) {
+            // Skip over nonprinting characters by assigning them empty textures
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RED,
+                0,
+                0,
+                0,
+                GL_RED,
+                GL_UNSIGNED_BYTE,
+                nullptr
+            );
+
+            // Now store character for later use
+            character = {
+                texture,
+                glm::ivec2(0),
+                glm::ivec2(0),
+                static_cast<unsigned int>(0)
+            };
+        } else {
+            if (FT_Error err = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_LCD)) {
+                std::cerr << "Glyph rendering error: " << err << std::endl;
             }
-            // generate texture
-            unsigned int texture;
-            glGenTextures(1, &texture);
-            glBindTexture(GL_TEXTURE_2D, texture);
+
             glTexImage2D(
                 GL_TEXTURE_2D,
                 0,
@@ -90,38 +130,112 @@ void TextLayer::setup() {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
             // Now store character for later use
-            Character character = {
+            character = {
                 texture,
                 glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
                 glm::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top),
                 static_cast<unsigned int>(face->glyph->advance.x)
             };
-            characters.insert(std::pair<char, Character>(c, character));
         }
-        glBindTexture(GL_TEXTURE_2D, 0);
+
+        char_textures[c] = texture;
+
+        characters.insert(std::pair<char, Character>(c, character));
+
+        current_width += character.size.x;
+
+        if (current_width > limit_width) {
+            if (current_width - character.size.x > atlas_width)
+                atlas_width = current_width - character.size.x;
+            current_width = character.size.x;
+            atlas_height += this->font_height;
+        }
     }
 
-    // Destroy FreeType once we're finished
+    atlas_height += this->font_height;
+
+    std::cout << "Atlas width: " << atlas_width << "px, height: " << atlas_height << "px" << std::endl;
+
+    // Create atlas
+    glGenTextures(1, &this->atlas_texture_id);
+    glBindTexture(GL_TEXTURE_2D, this->atlas_texture_id);
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RED,
+        atlas_width,
+        atlas_height,
+        0,
+        GL_RED,
+        GL_UNSIGNED_BYTE,
+        NULL
+    );
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // Populate atlas
+    int x = 0;
+    int y = 0;
+    for (auto const& [key, ch] : characters) {
+        if (x + ch.size.x > atlas_width) {
+            x = 0;
+            y += this->font_height;
+        }
+
+        glCopyImageSubData(
+            ch.texture_id,          // Source texture
+            GL_TEXTURE_2D,          // Source type
+            0,                      // Source mipmap level
+            0,                      // Source X
+            0,                      // Source Y
+            0,                      // Source Z
+            this->atlas_texture_id, // Destination texture
+            GL_TEXTURE_2D,          // Destination type
+            0,                      // Destination mipmap level
+            x,                      // Destination X
+            y,                      // Destination Y
+            0,                      // Destination Z
+            ch.size.x,              // Source width
+            ch.size.y,              // Source height
+            1                       // Source depth
+        );
+
+        float uv_x1 = float(x) / atlas_width;
+        float uv_y1 = float(y) / atlas_height;
+        float uv_x2 = float(x + ch.size.x) / atlas_width;
+        float uv_y2 = float(y + ch.size.y) / atlas_height;
+
+        std::cout
+            << "Character #" << static_cast<unsigned int>(key) << std::endl
+            << "  UV1 (" << uv_x1 << ", " << uv_y1 << ")" << std::endl
+            << "  UV2 (" << uv_x2 << ", " << uv_y2 << ")" << std::endl;
+
+        characters[key].uv_start = glm::vec2(uv_x1, uv_y1);
+        characters[key].uv_stop = glm::vec2(uv_x2, uv_y2);
+
+        x += ch.size.x;
+    }
+
+    // Discard individual character textures
+    glDeleteTextures(char_count, char_textures);
+
+    // Discard freetype objects
     FT_Done_Face(face);
     FT_Done_FreeType(ft);
 
-    // Configure VAO/VBO for texture quads
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, NULL, GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-
-    this->update();
+    return true;
 }
 
 TextLayer::~TextLayer() {
-    glDeleteVertexArrays(1, &this->VAO);
-    glDeleteBuffers(1, &this->VBO);
+    glDeleteBuffers(1, &this->vbo_vertices);
+    glDeleteBuffers(1, &this->vbo_uvs);
+    glDeleteBuffers(1, &this->vbo_colors);
+    glDeleteBuffers(1, &this->ibo_faces);
+
+    glDeleteTextures(1, &this->atlas_texture_id);
 }
 
 void TextLayer::set_text(string text) {
@@ -131,183 +245,125 @@ void TextLayer::set_text(string text) {
 
 void TextLayer::set_position(float x, float y) {
     this->x = x * Window::width;
-    this->y = (1.0f - y) * Window::height - this->scale * this->char_height;
+    this->y = (1.0f - y) * Window::height - this->scale * this->font_height;
     this->recalculate_visibility();
 }
 
 void TextLayer::recalculate_visibility() {
 }
 
-void TextLayer::recalculate_visibility_2() {
-    auto start = high_resolution_clock::now();
-
-    float x = this->x;
-    float y = this->y;
-
-    // Iterate through all characters
-    bool invisible_until_eol = false;
-    bool invisible_until_eof = false;
-    for (int i = 0; i < this->text.size(); ++i) {
-        char c = this->text[i];
-        Character ch = characters[c];
-        bool visible = true;
-
-        float x_pos = x + ch.bearing.x * this->scale;
-        float y_pos = y - (ch.size.y - ch.bearing.y) * this->scale;
-
-        float w = ch.size.x * this->scale;
-        float h = ch.size.y * this->scale;
-
-        if (x_pos > Window::width) {
-            invisible_until_eol = true;
-            visible = false;
-        }
-
-        if (y_pos > Window::height) {
-            visible = false;
-        }
-
-        if ((y_pos + ch.bearing.y) < 0) {
-            invisible_until_eof = true;
-        }
-
-        if (c == '\n' and invisible_until_eof) {
-            for (int j = i; j < this->geometry.size(); ++j)
-                this->geometry[j].visible = false;
-            break;
-        }
-
-        if (c == '\n') {
-            invisible_until_eol = false;
-            x = this->x;
-            y -= this->char_height * this->scale;
-        } else if (c == '\r') {
-            x = this->x;
-        } else {
-            // Advance cursors for next glyph (note that advance is number of 1/64 pixels)
-            x += (ch.advance >> 6) * this->scale; // bitshift by 6 to get value in pixels (2^6 = 64)
-        }
-
-        // Update VBO for each character
-        float verts[6][4] = {
-            { x_pos,     y_pos + h,   0.0f, 0.0f },
-            { x_pos,     y_pos,       0.0f, 1.0f },
-            { x_pos + w, y_pos,       1.0f, 1.0f },
-
-            { x_pos,     y_pos + h,   0.0f, 0.0f },
-            { x_pos + w, y_pos,       1.0f, 1.0f },
-            { x_pos + w, y_pos + h,   1.0f, 0.0f }
-        };
-
-        memcpy(&this->geometry[i].vertices, verts, 6 * 4 * sizeof(float));
-        this->geometry[i].visible = invisible_until_eol ? false : visible;
-    }
-
-    auto stop = high_resolution_clock::now();
-    auto duration = duration_cast<microseconds>(stop - start);
-    std::cout << "recalculate_visibility took " << duration.count() << "µs" << std::endl;
-}
-
 void TextLayer::update() {
-    float x = this->x;
-    float y = this->y;
+    float last_x = -1.0f;
 
-    glm::mat4 projection = glm::ortho(
-        0.0f,
-        static_cast<float>(Window::width),
-        0.0f,
-        static_cast<float>(Window::height)
-    );
-    glUniformMatrix4fv(glGetUniformLocation(this->shader_id, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    for (unsigned char c : this->text) {
+        Character ch = characters[c];
 
-    this->geometry.clear();
+        float bearing_x = 2.0f * ch.bearing.x / Window::width;
+        float width = 2.0f * ch.size.x / Window::width;
+        float height = 2.0f * ch.size.y / Window::height;
+        float advance = 2.0f * ch.advance / 64.0f / Window::width;
 
-    // Iterate through all characters
-    std::string::const_iterator c;
-    for (c = this->text.begin(); c != this->text.end(); ++c) {
-        Character ch = characters[*c];
-        bool visible = true;
+        float x_pos = last_x + bearing_x;
+        float y_pos = 1.0f - 2.0f * (float)(this->font_height - ch.bearing.y) / Window::height;
 
-        float x_pos = x + ch.bearing.x * this->scale;
-        float y_pos = y - (ch.size.y - ch.bearing.y) * this->scale;
+        vertices.push_back(glm::vec4(x_pos,         y_pos - height, 0.0f, 1.0f));
+        vertices.push_back(glm::vec4(x_pos,         y_pos,          0.0f, 1.0f));
+        vertices.push_back(glm::vec4(x_pos + width, y_pos,          0.0f, 1.0f));
+        vertices.push_back(glm::vec4(x_pos + width, y_pos - height, 0.0f, 1.0f));
 
-        float w = ch.size.x * this->scale;
-        float h = ch.size.y * this->scale;
+        glm::vec2 uv_start = ch.uv_start;
+        glm::vec2 uv_stop = ch.uv_stop;
 
-        if (y_pos > Window::height || x_pos > Window::width) {
-            visible = false;
-        }
+        uvs.push_back(glm::vec2(uv_start.x, uv_stop.y));
+        uvs.push_back(glm::vec2(uv_start.x, uv_start.y));
+        uvs.push_back(glm::vec2(uv_stop.x, uv_start.y));
+        uvs.push_back(glm::vec2(uv_stop.x, uv_stop.y));
 
-        if ((y_pos + ch.bearing.y) < 0) {
-            visible = false;
-        }
+        colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
 
-        if (*c == '\n') {
-            x = this->x;
-            y -= this->char_height * this->scale;
-        } else if (*c == '\r') {
-            x = this->x;
-        } else {
-            // Update VBO for each character
-            CharacterGeometry cg = {
-                {
-                    { x_pos,     y_pos + h,   0.0f, 0.0f },
-                    { x_pos,     y_pos,       0.0f, 1.0f },
-                    { x_pos + w, y_pos,       1.0f, 1.0f },
+        faces.push_back(vertices.size() - 4);
+        faces.push_back(vertices.size() - 3);
+        faces.push_back(vertices.size() - 2);
+        faces.push_back(vertices.size() - 4);
+        faces.push_back(vertices.size() - 2);
+        faces.push_back(vertices.size() - 1);
 
-                    { x_pos,     y_pos + h,   0.0f, 0.0f },
-                    { x_pos + w, y_pos,       1.0f, 1.0f },
-                    { x_pos + w, y_pos + h,   1.0f, 0.0f }
-                },
-                ch.texture_id,
-                visible
-            };
-
-            this->geometry.push_back(cg);
-
-            // Advance cursors for next glyph (note that advance is number of 1/64 pixels)
-            x += (ch.advance >> 6) * this->scale; // bitshift by 6 to get value in pixels (2^6 = 64)
-        }
+        last_x += advance;
     }
+
+   /* vertices.push_back(glm::vec4(-1.0f, -1.0f, 0.0f, 1.0f));
+    vertices.push_back(glm::vec4(-1.0f, 1.0f, 0.0f, 1.0f));
+    vertices.push_back(glm::vec4(1.0f, 1.0f, 0.0f, 1.0f));
+    vertices.push_back(glm::vec4(1.0f, -1.0f, 0.0f, 1.0f));
+
+    uvs.push_back(glm::vec2(0.0f, 1.0f));
+    uvs.push_back(glm::vec2(0.0f, 0.0f));
+    uvs.push_back(glm::vec2(1.0f, 0.0f));
+    uvs.push_back(glm::vec2(1.0f, 1.0f));
+
+    colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+    colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+    colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+    colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+
+    faces.push_back(vertices.size() - 4);
+    faces.push_back(vertices.size() - 3);
+    faces.push_back(vertices.size() - 2);
+    faces.push_back(vertices.size() - 4);
+    faces.push_back(vertices.size() - 2);
+    faces.push_back(vertices.size() - 1);*/
+
+    glBindBuffer(GL_ARRAY_BUFFER, this->vbo_vertices);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec4), vertices.data(), GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ARRAY_BUFFER, this->vbo_uvs);
+    glBufferData(GL_ARRAY_BUFFER, uvs.size() * sizeof(glm::vec2), uvs.data(), GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ARRAY_BUFFER, this->vbo_colors);
+    glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec4), colors.data(), GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->ibo_faces);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, faces.size() * sizeof(GLushort), faces.data(), GL_STATIC_DRAW);
 }
 
 void TextLayer::draw() {
-    glm::vec3 color(0.5, 0.8f, 0.2f);
+    glm::vec3 translation(
+        2.0f * this->x / Window::width,
+        -2.0f * (1.0f - this->y / Window::height),
+        0.0f);
+    glm::mat4 model(1.0f);
+    model = glm::translate(model, translation);
 
-    glUniform3fv(glGetUniformLocation(this->shader_id, "textColor"), 1, glm::value_ptr(color));
+    GLuint model_location = glGetUniformLocation(this->shader_id, "model");
+    glUniformMatrix4fv(model_location, 1, GL_FALSE, glm::value_ptr(model));
 
+    GLuint texture_location = glGetUniformLocation(this->shader_id, "texture");
     glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, this->atlas_texture_id);
+    glUniform1i(texture_location, 0);
 
-    float time_val = glfwGetTime();
-    float green_val = sin(time_val) / 2.0f + 0.5f;
-    glUniform1f(glGetUniformLocation(this->shader_id, "animationProgress"), green_val);
+    GLint vertex_position = glGetAttribLocation(this->shader_id, "vertex");
+    glEnableVertexAttribArray(vertex_position);
+    glBindBuffer(GL_ARRAY_BUFFER, this->vbo_vertices);
+    glVertexAttribPointer(vertex_position, 4, GL_FLOAT, GL_FALSE, 0, 0);
 
-    glm::mat4 projection = glm::ortho(
-        0.0f,
-        static_cast<float>(Window::width),
-        0.0f,
-        static_cast<float>(Window::height)
-    );
-    glUniformMatrix4fv(glGetUniformLocation(this->shader_id, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    GLint uv_position = glGetAttribLocation(this->shader_id, "tex_coord");
+    glEnableVertexAttribArray(uv_position);
+    glBindBuffer(GL_ARRAY_BUFFER, this->vbo_uvs);
+    glVertexAttribPointer(uv_position, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
-    glBindVertexArray(this->VAO);
+    GLint color_position = glGetAttribLocation(this->shader_id, "color");
+    glEnableVertexAttribArray(color_position);
+    glBindBuffer(GL_ARRAY_BUFFER, this->vbo_colors);
+    glVertexAttribPointer(color_position, 4, GL_FLOAT, GL_FALSE, 0, 0);
 
-    for (CharacterGeometry cg : this->geometry) {
-        if (!cg.visible)
-            continue;
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->ibo_faces);
+    glDrawElements(GL_TRIANGLES, this->faces.size(), GL_UNSIGNED_SHORT, 0);
 
-        // Render glyph texture over quad
-        glBindTexture(GL_TEXTURE_2D, cg.texture_id);
-
-        // Update content of VBO memory
-        glBindBuffer(GL_ARRAY_BUFFER, this->VBO);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(cg.vertices), cg.vertices);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-        // Render quad
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-    }
-
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glDisableVertexAttribArray(vertex_position);
+    glDisableVertexAttribArray(uv_position);
+    glDisableVertexAttribArray(color_position);
 }

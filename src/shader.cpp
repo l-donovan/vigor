@@ -37,7 +37,6 @@ void Shader::compile() {
     vertex_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
     fragment_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
 
-
     try {
         // Open files
         vertex_file.open(this->vertex_path);
@@ -45,8 +44,8 @@ void Shader::compile() {
         std::stringstream vertex_stream, fragment_stream;
 
         // Read file's buffer contents into streams
-        vertex_stream << vertex_file.rdbuf();
-        fragment_stream << fragment_file.rdbuf();
+        vertex_stream << "#version 410" << std::endl << vertex_file.rdbuf();
+        fragment_stream << "#version 410" << std::endl << fragment_file.rdbuf();
 
         // Close file handlers
         vertex_file.close();

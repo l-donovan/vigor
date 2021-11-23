@@ -1,10 +1,18 @@
-#version 330 core
-layout (location = 0) in vec4 vertex; // <vec2 pos, vec2 tex>
-out vec2 TexCoords;
+uniform mat4 model;
+//uniform mat4 view;
+//uniform mat4 projection;
 
-uniform mat4 projection;
+in vec4 vertex;
+in vec2 tex_coord;
+in vec4 color;
+
+out vec2 v_uv;
+out vec4 v_color;
 
 void main() {
-    gl_Position = projection * vec4(vertex.xy, 0.0, 1.0);
-    TexCoords = vertex.zw;
+    v_uv = tex_coord.xy;
+    v_color = color;
+
+    //gl_Position = projection * view * model * vertex;
+    gl_Position = model * vertex;
 }

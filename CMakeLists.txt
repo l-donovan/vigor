@@ -11,8 +11,6 @@ set_property(TARGET vigor PROPERTY CXX_STANDARD 20)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(freetype CONFIG REQUIRED)
-find_package(sdl2-image CONFIG REQUIRED)
 
 target_link_libraries(vigor PUBLIC glfw)
-target_link_libraries(vigor PUBLIC SDL2::SDL2_image)
 target_link_libraries(vigor PUBLIC freetype)

@@ -11,7 +11,6 @@ add_executable(vigor
     shader.cpp
     example_layer.cpp
     text_layer.cpp
-    text_renderer.cpp
     window.cpp
 )
 

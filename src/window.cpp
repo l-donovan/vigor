@@ -84,8 +84,9 @@ bool Window::startup() {
         return false;
     }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_SAMPLES, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
@@ -123,12 +124,17 @@ bool Window::startup() {
 }
 
 void Window::main_loop() {
+    GLuint vao;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
     while (!glfwWindowShouldClose(this->win)) {
         // TODO: this->logic();
 
         // Clear the colorbuffer
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
+        glViewport(0, 0, width, height);
 
         for (Shader *shader : this->shaders) {
             shader->use();
@@ -138,6 +144,8 @@ void Window::main_loop() {
         glfwSwapBuffers(this->win);
         glfwPollEvents();
     }
+
+    glDeleteVertexArrays(1, &vao);
 
     glfwDestroyWindow(this->win);
     glfwTerminate();

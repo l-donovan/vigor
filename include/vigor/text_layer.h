@@ -2,13 +2,21 @@
 #include <glm/glm.hpp>
 
 #include "layer.h"
-#include "text_renderer.h"
 
 #include <string>
 #include <vector>
 
 using std::string;
 using std::vector;
+
+struct Character {
+    unsigned int texture_id; // ID handle of the glyph texture
+    glm::ivec2   size;       // Size of glyph
+    glm::ivec2   bearing;    // Offset from baseline to left/top of glyph
+    unsigned int advance;    // Horizontal offset to advance to next glyph
+    glm::vec2 uv_start;
+    glm::vec2 uv_stop;
+};
 
 struct CharacterGeometry {
     float vertices[6][4];
@@ -18,21 +26,27 @@ struct CharacterGeometry {
 
 class TextLayer : public Layer {
     private:
-        unsigned int VBO, VAO;
-        unsigned int char_height = 48;
+        GLuint vbo_vertices, vbo_colors, vbo_uvs, ibo_faces;
+        GLuint atlas_texture_id;
         float scale = 0.5f;
         float x, y;
         string text;
-        vector<CharacterGeometry> geometry;
-        TextRenderer renderer;
+        vector<glm::vec4> vertices;
+        vector<glm::vec2> uvs;
+        vector<glm::vec4> colors;
+        vector<GLushort> faces;
     public:
         ~TextLayer();
 
+        std::string font_path;
+        int font_height;
+
+        void set_font(string font_path, int font_height);
         void setup();
         void draw();
         void update();
+        bool load();
         void recalculate_visibility();
-        void recalculate_visibility_2();
         void set_text(string text);
         void set_position(float x, float y);
 };

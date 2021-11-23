@@ -1,18 +1,11 @@
-#version 330 core
-in vec2 TexCoords;
-out vec4 color;
+uniform sampler2D texture;
 
-uniform sampler2D text;
-uniform vec3 textColor;
-uniform float animationProgress;
+in vec2 v_uv;
+in vec4 v_color;
+
+out vec4 frag_color;
 
 void main() {
-    vec4 fg = vec4(textColor, 1.0);
-    vec4 bg = vec4(1.0f - textColor.xyz, 1.0);
-
-    vec4 sampled = vec4(1.0, 1.0, 1.0, texture(text, TexCoords).r);
-    color = mix(
-        mix(bg, fg, animationProgress),
-        mix(fg, bg, animationProgress),
-    texture(text, TexCoords).r);
+    float a = texture2D(texture, v_uv.xy).r;
+    frag_color = vec4(v_color.rgb, v_color.a * a);
 }
