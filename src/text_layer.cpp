@@ -9,7 +9,7 @@
 #include <freetype/ftlcdfil.h>
 #include FT_FREETYPE_H
 
-#include "vigor/file_buffer.h"
+#include "vigor/text_buffer.h"
 #include "vigor/text_layer.h"
 #include "vigor/window.h"
 

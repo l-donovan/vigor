@@ -5,7 +5,7 @@
 #include <string>
 #include <optional>
 
-struct TextBuffer : public std::filebuf {
+class TextBuffer {
 private:
     using callable_t = std::function<bool(std::filebuf::int_type)>;
     callable_t callback = nullptr;

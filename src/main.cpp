@@ -40,7 +40,7 @@ void window_size_changed(int new_width, int new_height) {
 }
 
 void key_event(int key, int scancode, int action, int mods) {
-    test_file << "Key: " << static_cast<unsigned int>(scancode);
+    //test_file << "Key: " << static_cast<unsigned int>(scancode);
     text_layer.update();
 }
 
@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
 
     // Handle all positioning after startup, once the window's dimensions
     // have been determined
-    text_layer.set_font("C:\\Windows\\Fonts\\IBMPlexMono-Regular.ttf", 24);
+    text_layer.set_font("/home/luke/.local/share/fonts/Blex Mono Nerd Font Complete Mono.ttf", 24);
     text_layer.set_text("My name is \"Luke Donovan\"!\nWelcome\nThis is a journey into sound");
     text_layer.set_text(buffer.str());
     text_layer.set_position(0.0f, 0.0f);

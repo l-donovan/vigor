@@ -1,7 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 
-#include "file_buffer.h"
+#include "text_buffer.h"
 #include "layer.h"
 
 #include <iostream>
@@ -41,7 +41,7 @@ class TextLayer : public Layer {
         vector<glm::vec2> uvs;
         vector<glm::vec4> colors;
         vector<GLushort> faces;
-        FileBuffer *buffer = nullptr;
+        TextBuffer *buffer = nullptr;
 
         std::string font_path;
         int font_height = 0;
@@ -56,5 +56,5 @@ class TextLayer : public Layer {
         bool load();
         void set_text(string text);
         void set_position(float x, float y);
-        void bind_buffer(FileBuffer *buffer);
+        void bind_buffer(TextBuffer *buffer);
 };
