@@ -1,5 +1,6 @@
 #include "vigor/engine.h"
 #include "vigor/example_layer.h"
+#include "vigor/text_buffer.h"
 #include "vigor/text_layer.h"
 #include "vigor/window.h"
 
@@ -23,6 +24,13 @@ Shader text_shader(
 ExampleLayer base_layer;
 TextLayer text_layer;
 
+bool file_write_callback(std::streambuf::int_type c) {
+    std::cout << "Callback got: " << static_cast<char>(c) << std::endl;
+    return true;
+}
+
+TextBuffer test_file(file_write_callback);
+
 void cursor_pos_changed(double x_pos, double y_pos) {
     text_layer.set_position(x_pos, y_pos);
 }
@@ -32,11 +40,18 @@ void window_size_changed(int new_width, int new_height) {
 }
 
 void key_event(int key, int scancode, int action, int mods) {
-    std::cout << "Key: " << static_cast<unsigned int>(scancode) << std::endl;
+    test_file << "Key: " << static_cast<unsigned int>(scancode);
     text_layer.update();
 }
 
 int main(int argc, char **argv) {
+    std::ifstream t;
+    t.open("C:\\Users\\ladbu\\projects\\vigor\\test.txt");
+    std::stringstream buffer;
+    buffer << t.rdbuf();
+    text_layer.bind_buffer(&test_file);
+    //test_file.open("C:\\Users\\ladbu\\projects\\vigor\\test.txt", std::ios_base::in | std::ios_base::out);
+
     // Attach the window to the engine
     engine.attach(&window);
 
@@ -56,11 +71,14 @@ int main(int argc, char **argv) {
     // Handle all positioning after startup, once the window's dimensions
     // have been determined
     text_layer.set_font("C:\\Windows\\Fonts\\IBMPlexMono-Regular.ttf", 24);
-    text_layer.set_text("My name is \"Luke Donovan\"!");
+    text_layer.set_text("My name is \"Luke Donovan\"!\nWelcome\nThis is a journey into sound");
+    text_layer.set_text(buffer.str());
     text_layer.set_position(0.0f, 0.0f);
 
     // Start the window's main loop
     window.main_loop();
+
+    //test_file.close();
 
     return EXIT_SUCCESS;
 }

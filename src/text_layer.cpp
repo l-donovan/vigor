@@ -9,6 +9,7 @@
 #include <freetype/ftlcdfil.h>
 #include FT_FREETYPE_H
 
+#include "vigor/file_buffer.h"
 #include "vigor/text_layer.h"
 #include "vigor/window.h"
 
@@ -39,6 +40,10 @@ void TextLayer::set_font(string font_path, int font_height) {
     this->font_path = font_path;
     this->font_height = font_height;
     this->load();
+}
+
+void TextLayer::bind_buffer(TextBuffer* buffer) {
+    this->buffer = buffer;
 }
 
 bool TextLayer::load() {
@@ -239,6 +244,7 @@ TextLayer::~TextLayer() {
 }
 
 void TextLayer::set_text(string text) {
+    std::cout << text.size() << std::endl;
     this->text = text;
     this->update();
 }
@@ -246,25 +252,45 @@ void TextLayer::set_text(string text) {
 void TextLayer::set_position(float x, float y) {
     this->x = x * Window::width;
     this->y = (1.0f - y) * Window::height - this->scale * this->font_height;
-    this->recalculate_visibility();
-}
-
-void TextLayer::recalculate_visibility() {
 }
 
 void TextLayer::update() {
-    float last_x = -1.0f;
+    this->vertices.clear();
+    this->uvs.clear();
+    this->colors.clear();
+    this->faces.clear();
 
-    for (unsigned char c : this->text) {
+    float last_x = -1.0f;
+    float last_y = 1.0f;
+
+    float font_height = 2.0f * this->font_height / Window::height;
+
+    float to_screen_width = 2.0f / Window::width;
+    float to_screen_height = 2.0f / Window::height;
+
+    float bearing_x, bearing_y, width, height, advance, x_pos, y_pos;
+
+    for (char c : this->text) {
         Character ch = characters[c];
 
-        float bearing_x = 2.0f * ch.bearing.x / Window::width;
-        float width = 2.0f * ch.size.x / Window::width;
-        float height = 2.0f * ch.size.y / Window::height;
-        float advance = 2.0f * ch.advance / 64.0f / Window::width;
+        if (c == '\n') {
+            last_y -= font_height;
+            last_x = -1.0f;
+            continue;
+        }
+        else if (c == '\r') {
+            last_x = -1.0f;
+            continue;
+        }
 
-        float x_pos = last_x + bearing_x;
-        float y_pos = 1.0f - 2.0f * (float)(this->font_height - ch.bearing.y) / Window::height;
+        bearing_x = ch.bearing.x * to_screen_width;
+        bearing_y = ch.bearing.y * to_screen_height;
+        width = ch.size.x * to_screen_width;
+        height = ch.size.y * to_screen_height;
+        advance = ch.advance / 64.0f * to_screen_width;
+
+        x_pos = last_x + bearing_x;
+        y_pos = last_y - (font_height - bearing_y);
 
         vertices.push_back(glm::vec4(x_pos,         y_pos - height, 0.0f, 1.0f));
         vertices.push_back(glm::vec4(x_pos,         y_pos,          0.0f, 1.0f));
@@ -293,28 +319,6 @@ void TextLayer::update() {
 
         last_x += advance;
     }
-
-   /* vertices.push_back(glm::vec4(-1.0f, -1.0f, 0.0f, 1.0f));
-    vertices.push_back(glm::vec4(-1.0f, 1.0f, 0.0f, 1.0f));
-    vertices.push_back(glm::vec4(1.0f, 1.0f, 0.0f, 1.0f));
-    vertices.push_back(glm::vec4(1.0f, -1.0f, 0.0f, 1.0f));
-
-    uvs.push_back(glm::vec2(0.0f, 1.0f));
-    uvs.push_back(glm::vec2(0.0f, 0.0f));
-    uvs.push_back(glm::vec2(1.0f, 0.0f));
-    uvs.push_back(glm::vec2(1.0f, 1.0f));
-
-    colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-    colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-    colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-    colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-
-    faces.push_back(vertices.size() - 4);
-    faces.push_back(vertices.size() - 3);
-    faces.push_back(vertices.size() - 2);
-    faces.push_back(vertices.size() - 4);
-    faces.push_back(vertices.size() - 2);
-    faces.push_back(vertices.size() - 1);*/
 
     glBindBuffer(GL_ARRAY_BUFFER, this->vbo_vertices);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec4), vertices.data(), GL_STATIC_DRAW);

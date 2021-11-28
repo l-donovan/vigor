@@ -12,6 +12,6 @@ add_executable(vigor
     example_layer.cpp
     text_layer.cpp
     window.cpp
-)
+   "text_buffer.cpp")
 
 target_link_libraries(vigor PRIVATE glad)
