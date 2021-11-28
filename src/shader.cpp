@@ -112,6 +112,14 @@ void Shader::use() {
     glUseProgram(this->id);
 }
 
+void Shader::teardown() {
+    for (Layer *layer : layers) {
+        layer->teardown();
+    }
+
+    glDeleteProgram(this->id);
+}
+
 void Shader::set_bool(const string name, bool value) const {
     glUniform1i(glGetUniformLocation(this->id, name.c_str()), (int) value);
 }

@@ -234,7 +234,7 @@ bool TextLayer::load() {
     return true;
 }
 
-TextLayer::~TextLayer() {
+void TextLayer::teardown() {
     glDeleteBuffers(1, &this->vbo_vertices);
     glDeleteBuffers(1, &this->vbo_uvs);
     glDeleteBuffers(1, &this->vbo_colors);
@@ -244,7 +244,6 @@ TextLayer::~TextLayer() {
 }
 
 void TextLayer::set_text(string text) {
-    std::cout << text.size() << std::endl;
     this->text = text;
     this->update();
 }

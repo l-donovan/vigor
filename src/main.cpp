@@ -46,7 +46,7 @@ void key_event(int key, int scancode, int action, int mods) {
 
 int main(int argc, char **argv) {
     std::ifstream t;
-    t.open("C:\\Users\\ladbu\\projects\\vigor\\test.txt");
+    t.open("/home/luke/projects/vigor/test.txt");
     std::stringstream buffer;
     buffer << t.rdbuf();
     text_layer.bind_buffer(&test_file);

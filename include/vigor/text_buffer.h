@@ -13,6 +13,7 @@ private:
 
     unsigned int start_line = 0;
     unsigned int stop_line = 0;
+    unsigned int max_buffer_height = 24;
 public:
     TextBuffer() {}
     TextBuffer(callable_t cb) : callback(cb) {}

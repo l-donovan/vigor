@@ -145,6 +145,11 @@ void Window::main_loop() {
         glfwPollEvents();
     }
 
+    for (Shader *shader : this->shaders) {
+        // Begin tearing down GL resources
+        shader->teardown();
+    }
+
     glDeleteVertexArrays(1, &vao);
 
     glfwDestroyWindow(this->win);

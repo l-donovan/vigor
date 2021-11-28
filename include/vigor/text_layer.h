@@ -47,11 +47,11 @@ class TextLayer : public Layer {
         int font_height = 0;
     public:
         TextLayer() {};
-        ~TextLayer();
 
         void set_font(string font_path, int font_height);
         void setup();
         void draw();
+        void teardown();
         void update();
         bool load();
         void set_text(string text);
