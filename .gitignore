@@ -1,4 +1,5 @@
 _build
+dist
 **/.DS_Store
 .vs
 out

@@ -78,6 +78,9 @@ bool TextLayer::load() {
     unsigned int total_height = 0;
     unsigned int limit_width = 512;
 
+    // Clear existing characters
+    characters.clear();
+
     // Load ASCII charset
     for (unsigned char c = 0; c < char_count; ++c) {
         if (FT_Load_Char(face, c, FT_LOAD_RENDER)) {
@@ -112,10 +115,6 @@ bool TextLayer::load() {
                 static_cast<unsigned int>(0)
             };
         } else {
-            if (FT_Error err = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_LCD)) {
-                std::cerr << "Glyph rendering error: " << err << std::endl;
-            }
-
             glTexImage2D(
                 GL_TEXTURE_2D,
                 0,
@@ -150,8 +149,10 @@ bool TextLayer::load() {
         current_width += character.size.x;
 
         if (current_width > limit_width) {
-            if (current_width - character.size.x > atlas_width)
+            if (current_width - character.size.x > atlas_width) {
                 atlas_width = current_width - character.size.x;
+            }
+
             current_width = character.size.x;
             atlas_height += this->font_height;
         }

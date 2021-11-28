@@ -41,6 +41,7 @@ void window_size_changed(int new_width, int new_height) {
 
 void key_event(int key, int scancode, int action, int mods) {
     //test_file << "Key: " << static_cast<unsigned int>(scancode);
+    text_layer.set_font("/home/luke/.local/share/fonts/Blex Mono Nerd Font Complete Mono.ttf", 48);
     text_layer.update();
 }
 
