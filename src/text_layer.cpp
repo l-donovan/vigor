@@ -246,6 +246,9 @@ void TextLayer::teardown() {
 void TextLayer::set_text(string text) {
     this->text = text;
     this->update();
+    std::cout << "C: " << this->text.size() << std::endl;
+    std::cout << "V: " << this->vertices.size() << std::endl;
+    std::cout << "F: " << this->faces.size() / 3 << std::endl;
 }
 
 void TextLayer::set_position(float x, float y) {
@@ -259,34 +262,39 @@ void TextLayer::update() {
     this->colors.clear();
     this->faces.clear();
 
+    float bearing_x, bearing_y, width, height, advance, x_pos, y_pos;
     float last_x = -1.0f;
     float last_y = 1.0f;
-
     float font_height = 2.0f * this->font_height / Window::height;
-
     float to_screen_width = 2.0f / Window::width;
     float to_screen_height = 2.0f / Window::height;
-
-    float bearing_x, bearing_y, width, height, advance, x_pos, y_pos;
+    float space_advance = characters[' '].advance / 64.0f * to_screen_width;
 
     for (char c : this->text) {
         Character ch = characters[c];
 
+        width = ch.size.x * to_screen_width;
+
+        // Handle geometry correctly for whitespace characters
         if (c == '\n') {
             last_y -= font_height;
             last_x = -1.0f;
             continue;
-        }
-        else if (c == '\r') {
+        } else if (c == '\r') {
             last_x = -1.0f;
+            continue;
+        } else if (c == ' ') {
+            last_x += space_advance;
+            continue;
+        } else if (c == '\t') {
+            last_x += 4.0f * space_advance;
             continue;
         }
 
+        advance = ch.advance / 64.0f * to_screen_width;
         bearing_x = ch.bearing.x * to_screen_width;
         bearing_y = ch.bearing.y * to_screen_height;
-        width = ch.size.x * to_screen_width;
         height = ch.size.y * to_screen_height;
-        advance = ch.advance / 64.0f * to_screen_width;
 
         x_pos = last_x + bearing_x;
         y_pos = last_y - (font_height - bearing_y);
@@ -312,6 +320,7 @@ void TextLayer::update() {
         faces.push_back(vertices.size() - 4);
         faces.push_back(vertices.size() - 3);
         faces.push_back(vertices.size() - 2);
+
         faces.push_back(vertices.size() - 4);
         faces.push_back(vertices.size() - 2);
         faces.push_back(vertices.size() - 1);

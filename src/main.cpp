@@ -50,7 +50,6 @@ int main(int argc, char **argv) {
     std::stringstream buffer;
     buffer << t.rdbuf();
     text_layer.bind_buffer(&test_file);
-    //test_file.open("C:\\Users\\ladbu\\projects\\vigor\\test.txt", std::ios_base::in | std::ios_base::out);
 
     // Attach the window to the engine
     engine.attach(&window);
@@ -71,8 +70,7 @@ int main(int argc, char **argv) {
     // Handle all positioning after startup, once the window's dimensions
     // have been determined
     text_layer.set_font("/home/luke/.local/share/fonts/Blex Mono Nerd Font Complete Mono.ttf", 24);
-    text_layer.set_text("My name is \"Luke Donovan\"!\nWelcome\nThis is a journey into sound");
-    text_layer.set_text(buffer.str());
+    text_layer.set_text("test\ttest" + buffer.str());
     text_layer.set_position(0.0f, 0.0f);
 
     // Start the window's main loop
