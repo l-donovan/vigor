@@ -7,8 +7,7 @@ class ExampleLayer : public Layer {
         unsigned int VBO, VAO;
         GLuint vbo_vertices, vbo_colors, ibo_faces;
     public:
-        ~ExampleLayer();
-
         void setup();
         void draw();
+        void teardown();
 };

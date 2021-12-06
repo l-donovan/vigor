@@ -9,6 +9,8 @@
 #include <freetype/ftlcdfil.h>
 #include FT_FREETYPE_H
 
+#include "vigor/global.h"
+#include "vigor/text_buffer.h"
 #include "vigor/text_layer.h"
 #include "vigor/window.h"
 
@@ -20,10 +22,6 @@
 #include <map>
 #include <string>
 #include <vector>
-
-// TODO: Remove after testing
-#include <chrono>
-using namespace std::chrono;
 
 using std::string;
 
@@ -42,22 +40,26 @@ void TextLayer::set_font(string font_path, int font_height) {
     this->load();
 }
 
+void TextLayer::bind_buffer(TextBuffer* buffer) {
+    this->buffer = buffer;
+}
+
 bool TextLayer::load() {
     FT_Library ft;
 
     if (FT_Init_FreeType(&ft)) {
-        std::cerr << "Could not initialize FreeType library" << std::endl;
+        PLOGE << "Could not initialize FreeType library";
         return false;
     }
 
     if (this->font_path.empty()) {
-        std::cerr << "Font path is unset" << std::endl;
+        PLOGE << "Font path is unset";
         return false;
     }
 
     FT_Face face;
     if (FT_New_Face(ft, this->font_path.c_str(), 0, &face)) {
-        std::cerr << "Failed to load font" << std::endl;
+        PLOGE << "Failed to load font";
         return false;
     }
 
@@ -73,10 +75,13 @@ bool TextLayer::load() {
     unsigned int atlas_width = 512;
     unsigned int atlas_height = 0;
 
+    // Clear existing characters
+    characters.clear();
+
     // Load ASCII charset
     for (unsigned char c = 0; c < char_count; ++c) {
         if (FT_Load_Char(face, c, FT_LOAD_RENDER)) {
-            std::cerr << "Failed to load glyph #" << static_cast<unsigned int>(c) << std::endl;
+            PLOGE << "Failed to load glyph #" << static_cast<unsigned int>(c);
             continue;
         }
 
@@ -100,7 +105,6 @@ bool TextLayer::load() {
             // The pitch is given in Bytes, thus bitmap_size is already in Bytes
             bitmap_data = (unsigned char*) malloc(bitmap_size);
             memcpy(bitmap_data, face->glyph->bitmap.buffer, bitmap_size);
-
             // Now store character for later use
             character = {
                 bitmap_data,
@@ -115,8 +119,6 @@ bool TextLayer::load() {
         current_width += character.size.x;
 
         if (current_width > atlas_width) {
-            if (current_width - character.size.x > atlas_width)
-                atlas_width = current_width - character.size.x;
             current_width = character.size.x;
             atlas_height += this->font_height;
         }
@@ -124,7 +126,7 @@ bool TextLayer::load() {
 
     atlas_height += this->font_height;
 
-    std::cout << "Atlas width: " << atlas_width << "px, height: " << atlas_height << "px" << std::endl;
+    PLOGI << "Atlas width: " << atlas_width << "px, height: " << atlas_height << "px";
 
     // Create atlas
     glGenTextures(1, &this->atlas_texture_id);
@@ -177,10 +179,10 @@ bool TextLayer::load() {
         characters[key].uv_start = glm::vec2(uv_x1, uv_y1);
         characters[key].uv_stop = glm::vec2(uv_x2, uv_y2);
 
-        std::cout
-            << "Character #" << static_cast<unsigned int>(key) << std::endl
-            << "  UV1 (" << uv_x1 << ", " << uv_y1 << ")" << std::endl
-            << "  UV2 (" << uv_x2 << ", " << uv_y2 << ")" << std::endl;
+        PLOGD
+            << "Character #" << static_cast<unsigned int>(key)
+            << ": UV1 (" << uv_x1 << ", " << uv_y1 << ")"
+            << ", UV2 (" << uv_x2 << ", " << uv_y2 << ")";
 
         // We don't need the bitmap data anymore now that it's in a texture atlas
         free(ch.data);
@@ -195,7 +197,7 @@ bool TextLayer::load() {
     return true;
 }
 
-TextLayer::~TextLayer() {
+void TextLayer::teardown() {
     glDeleteBuffers(1, &this->vbo_vertices);
     glDeleteBuffers(1, &this->vbo_uvs);
     glDeleteBuffers(1, &this->vbo_colors);
@@ -207,24 +209,32 @@ TextLayer::~TextLayer() {
 void TextLayer::set_text(string text) {
     this->text = text;
     this->update();
+    PLOGD
+        << "C: " << this->text.size()
+        << ", V: " << this->vertices.size()
+        << ", F: " << this->faces.size() / 3;
 }
 
 void TextLayer::set_position(float x, float y) {
     this->x = x * Window::width;
     this->y = (1.0f - y) * Window::height - this->scale * this->font_height;
-    this->recalculate_visibility();
-}
-
-void TextLayer::recalculate_visibility() {
 }
 
 void TextLayer::update() {
-    float last_x = -1.0f;
+    PLOGD << "Update called";
 
-    vertices.clear();
-    uvs.clear();
-    colors.clear();
-    faces.clear();
+    this->vertices.clear();
+    this->uvs.clear();
+    this->colors.clear();
+    this->faces.clear();
+
+    float bearing_x, bearing_y, width, height, advance, x_pos, y_pos;
+    float last_x = -1.0f;
+    float last_y = 1.0f;
+    float font_height = 2.0f * this->font_height / Window::height;
+    float to_screen_width = 2.0f / Window::width;
+    float to_screen_height = 2.0f / Window::height;
+    float space_advance = characters[' '].advance / 64.0f * to_screen_width;
 
     // NOTE: This chunk of commented code is useful for ensuring the texture atlas is being calculated correctly
 
@@ -250,16 +260,34 @@ void TextLayer::update() {
     //faces.push_back(vertices.size() - 2);
     //faces.push_back(vertices.size() - 1);
 
-    for (unsigned char c : this->text) {
+    for (char c : this->text) {
         Character ch = characters[c];
 
-        float bearing_x = 2.0f * ch.bearing.x / Window::width;
-        float width = 2.0f * ch.size.x / Window::width;
-        float height = 2.0f * ch.size.y / Window::height;
-        float advance = 2.0f * ch.advance / 64.0f / Window::width;
+        width = ch.size.x * to_screen_width;
 
-        float x_pos = last_x + bearing_x;
-        float y_pos = 1.0f - 2.0f * (float)(this->font_height - ch.bearing.y) / Window::height;
+        // Handle geometry correctly for whitespace characters
+        if (c == '\n') {
+            last_y -= font_height;
+            last_x = -1.0f;
+            continue;
+        } else if (c == '\r') {
+            last_x = -1.0f;
+            continue;
+        } else if (c == ' ') {
+            last_x += space_advance;
+            continue;
+        } else if (c == '\t') {
+            last_x += 4.0f * space_advance;
+            continue;
+        }
+
+        advance = ch.advance / 64.0f * to_screen_width;
+        bearing_x = ch.bearing.x * to_screen_width;
+        bearing_y = ch.bearing.y * to_screen_height;
+        height = ch.size.y * to_screen_height;
+
+        x_pos = last_x + bearing_x;
+        y_pos = last_y - (font_height - bearing_y);
 
         vertices.push_back(glm::vec4(x_pos,         y_pos - height, 0.0f, 1.0f));
         vertices.push_back(glm::vec4(x_pos,         y_pos,          0.0f, 1.0f));
@@ -282,6 +310,7 @@ void TextLayer::update() {
         faces.push_back(vertices.size() - 4);
         faces.push_back(vertices.size() - 3);
         faces.push_back(vertices.size() - 2);
+
         faces.push_back(vertices.size() - 4);
         faces.push_back(vertices.size() - 2);
         faces.push_back(vertices.size() - 1);

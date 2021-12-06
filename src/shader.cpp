@@ -7,6 +7,7 @@
 #include <string>
 #include <iostream>
 
+#include "vigor/global.h"
 #include "vigor/layer.h"
 #include "vigor/shader.h"
 
@@ -55,7 +56,7 @@ void Shader::compile() {
         vertex_code = vertex_stream.str();
         fragment_code = fragment_stream.str();
     } catch (std::ifstream::failure e) {
-        std::cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ" << std::endl;
+        PLOGE << "Failed to read shader file";
     }
 
     const char* vertex_shader = vertex_code.c_str();
@@ -75,7 +76,7 @@ void Shader::compile() {
     glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
     if (!success) {
         glGetShaderInfoLog(vertex, 512, NULL, info_log);
-        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << info_log << std::endl;
+        PLOGE << "Failed to compile vertex shader: " << info_log;
     }
 
     // Fragment shader
@@ -87,7 +88,7 @@ void Shader::compile() {
     glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
     if (!success) {
         glGetShaderInfoLog(fragment, 512, NULL, info_log);
-        std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << info_log << std::endl;
+        PLOGE << "Failed to compile fragment shader: " << info_log;
     }
 
     // Shader Program
@@ -100,7 +101,7 @@ void Shader::compile() {
     glGetProgramiv(this->id, GL_LINK_STATUS, &success);
     if (!success) {
         glGetProgramInfoLog(id, 512, NULL, info_log);
-        std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED" << std::endl << info_log << std::endl;
+        PLOGE << "Failed to link shader program: " << info_log;
     }
 
     // Delete the shaders. They're linked into our program now and are no longer necessary
@@ -110,6 +111,14 @@ void Shader::compile() {
 
 void Shader::use() {
     glUseProgram(this->id);
+}
+
+void Shader::teardown() {
+    for (Layer *layer : layers) {
+        layer->teardown();
+    }
+
+    glDeleteProgram(this->id);
 }
 
 void Shader::set_bool(const string name, bool value) const {

@@ -1,5 +1,7 @@
+#include "vigor/global.h"
 #include "vigor/engine.h"
 #include "vigor/example_layer.h"
+#include "vigor/text_buffer.h"
 #include "vigor/text_layer.h"
 #include "vigor/window.h"
 
@@ -23,26 +25,50 @@ Shader text_shader(
 ExampleLayer base_layer;
 TextLayer text_layer;
 
+bool file_write_callback(std::streambuf::int_type c) {
+    PLOGD << "Callback got: " << static_cast<char>(c);
+    return true;
+}
+
+TextBuffer test_file(file_write_callback);
+
 void cursor_pos_changed(double x_pos, double y_pos) {
     text_layer.set_position(x_pos, y_pos);
 }
 
 void window_size_changed(int new_width, int new_height) {
-    std::cout << "W: " << new_width << " H: " << new_height << std::endl;
-}
-
-void key_event(int key, int scancode, int action, int mods) {
-    std::cout << "Key: " << static_cast<unsigned int>(scancode) << std::endl;
     text_layer.update();
 }
 
+void key_event(int key, int scancode, int action, int mods) {
+    engine.add_outgoing_event({WindowResizeRequest, {500, 500}});
+}
+
 int main(int argc, char **argv) {
+    // The process for resizing the window when a key is pressed:
+    // 1. glfw gets keypress
+    // 2. glfw sends the keypress to the registered handler
+    // 3. the handler sends a keypress event to the engine
+    // 4. the engine processes the event
+    // 5. the engine sends a resize event to the window
+    // 6. the engine processes the event and asks glfw to resize the window
+
+    static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
+    plog::init(plog::debug, &consoleAppender);
+
+    std::ifstream t;
+    t.open("/home/luke/projects/vigor/test.txt");
+    std::stringstream buffer;
+    buffer << t.rdbuf();
+    text_layer.bind_buffer(&test_file);
+
     // Attach the window to the engine
-    engine.attach(&window);
+    // (it's actually happening the other way around behind the scenes)
+    window.attach_to(engine);
 
     // Add that layer to the window, using the shader that was
     // created earlier
-    //window.add_layer(&base_layer, &base_shader);
+    window.add_layer(&base_layer, &base_shader);
     window.add_layer(&text_layer, &text_shader);
 
     // Register some callbacks
@@ -55,12 +81,14 @@ int main(int argc, char **argv) {
 
     // Handle all positioning after startup, once the window's dimensions
     // have been determined
-    text_layer.set_font("/Users/ldonovan/Library/Fonts/Blex Mono Medium Nerd Font Complete Mono.ttf", 24);
-    text_layer.set_text("My name is \"Luke Donovan\"!");
+    text_layer.set_font("/home/luke/.local/share/fonts/Blex Mono Nerd Font Complete Mono.ttf", 24);
+    text_layer.set_text("test\ttest" + buffer.str());
     text_layer.set_position(0.0f, 0.0f);
 
     // Start the window's main loop
     window.main_loop();
+
+    //test_file.close();
 
     return EXIT_SUCCESS;
 }

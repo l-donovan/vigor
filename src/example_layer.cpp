@@ -40,7 +40,7 @@ void ExampleLayer::setup() {
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, faces.size() * sizeof(GLushort), faces.data(), GL_STATIC_DRAW);
 }
 
-ExampleLayer::~ExampleLayer() {
+void ExampleLayer::teardown() {
     glDeleteBuffers(1, &this->vbo_vertices);
     glDeleteBuffers(1, &this->vbo_colors);
     glDeleteBuffers(1, &this->ibo_faces);

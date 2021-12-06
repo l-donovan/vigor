@@ -18,9 +18,10 @@ elif [ ! -f $VCPKG_DIR/vcpkg ]; then
 fi
 
 mkdir -p $BUILD_DIR $DIST_DIR &&\
-cmake -B $BUILD_DIR -S . -DCMAKE_TOOLCHAIN_FILE=$VCPKG_DIR/scripts/buildsystems/vcpkg.cmake &&\
+cmake -B $BUILD_DIR -S . -DCMAKE_TOOLCHAIN_FILE=$VCPKG_DIR/scripts/buildsystems/vcpkg.cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 &&\
 cmake --build $BUILD_DIR &&\
 cp $BUILD_DIR/src/vigor $DIST_DIR/vigor &&\
+cp $BUILD_DIR/compile_commands.json . &&\
 RC=0
 
 exit $RC

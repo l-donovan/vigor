@@ -2,12 +2,17 @@
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
 
+#include <plog/Log.h>
+
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <string>
 #include <vector>
 
+#include "vigor/global.h"
+#include "vigor/engine.h"
+#include "vigor/event.h"
 #include "vigor/layer.h"
 #include "vigor/shader.h"
 #include "vigor/window.h"
@@ -16,6 +21,9 @@
 //std::string ROOT_DIR(_ROOT_DIR);
 
 using std::string;
+
+#include <chrono>
+using namespace std::chrono;
 
 Window::Window(string window_title, int initial_width, int initial_height) {
     this->window_title = window_title;
@@ -29,9 +37,18 @@ Window::~Window() {
 void (*Window::cursor_pos)(double x_pos, double y_pos) = NULL;
 void (*Window::window_size)(int width, int height) = NULL;
 void (*Window::key_event)(int key, int scancode, int action, int mods) = NULL;
+Engine Window::engine = Engine();
 
 int Window::width = 0;
 int Window::height = 0;
+
+int fps_count = 0;
+float fps_avg = 0.0f;
+int fps_samples = 30;
+
+void Window::attach_to(Engine engine) {
+    Window::engine = engine;
+}
 
 void Window::global_cursor_pos_callback(GLFWwindow *window, double x_pos, double y_pos) {
     double x_adj = x_pos / Window::width;
@@ -41,6 +58,7 @@ void Window::global_cursor_pos_callback(GLFWwindow *window, double x_pos, double
         return;
 
     Window::cursor_pos(x_adj, y_adj);
+    Window::engine.add_incoming_event({CursorPosition, {x_pos, y_pos}});
 }
 
 void Window::global_window_size_callback(GLFWwindow *window, int width, int height) {
@@ -49,14 +67,16 @@ void Window::global_window_size_callback(GLFWwindow *window, int width, int heig
     Window::width = width;
     Window::height = height;
 
-    Window::window_size(width, height);
+    Window::window_size(width, height); // TODO: These should eventually be removed
+    Window::engine.add_incoming_event({WindowResize, {width, height}});
 }
 
 void Window::global_key_event_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, GLFW_TRUE);
     } else {
-        Window::key_event(key, scancode, action, mods);
+        Window::key_event(key, scancode, action, mods); // TODO: These should eventually be removed
+        Window::engine.add_incoming_event({Key, {key, scancode, action, mods}});
     }
 }
 
@@ -73,14 +93,14 @@ void Window::register_key_event_fn(void (*fp)(int key, int scancode, int action,
 }
 
 static void glfw_error_callback(int error, const char *description) {
-    std::cerr << "Error: " << description << std::endl;
+    PLOGE << "Error: " << description;
 }
 
 bool Window::startup() {
     glfwSetErrorCallback(glfw_error_callback);
 
     if (!glfwInit()) {
-        std::cerr << "Error: glfwInit" << std::endl;
+        PLOGE << "Error: glfwInit";
         return false;
     }
 
@@ -97,7 +117,7 @@ bool Window::startup() {
 
     if (!this->win) {
         glfwTerminate();
-        std::cerr << "Error: can't create window" << std::endl;
+        PLOGE << "Error: can't create window";
         return false;
     }
 
@@ -123,30 +143,70 @@ bool Window::startup() {
     return true;
 }
 
+void Window::draw() {
+    // Clear the colorbuffer
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    //glViewport(0, 0, width, height);
+
+    for (Shader *shader : this->shaders) {
+        shader->use();
+        shader->draw_layers();
+    }
+
+    glfwSwapBuffers(this->win);
+}
+
+void Window::process_events() {
+    // This is where the window acts on the events sent from the engine
+    std::optional<Event> event;
+    while ((event = Window::engine.pop_outgoing_event()).has_value()) {
+        if (event->type == WindowResizeRequest) {
+            int width = std::get<int>(event->data[0]);
+            int height = std::get<int>(event->data[1]);
+            glfwSetWindowSize(this->win, width, height);
+            glViewport(0, 0, width, height);
+
+            PLOGI << "Got window resize request";
+            PLOGI << "W: " << width << ", H: " << height;
+        } else {
+            PLOGE << "Got unknown event type";
+        }
+    }
+}
+
 void Window::main_loop() {
     GLuint vao;
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
 
     while (!glfwWindowShouldClose(this->win)) {
-        // TODO: this->logic();
+        Window::engine.process_events();
+        this->process_events();
 
-        // Clear the colorbuffer
-        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glViewport(0, 0, width, height);
+        auto start = high_resolution_clock::now();
+        this->draw();
+        auto stop = high_resolution_clock::now();
+        auto duration = duration_cast<microseconds>(stop - start);
+        auto fps = 1000000.0f / duration.count();
 
-        for (Shader *shader : this->shaders) {
-            shader->use();
-            shader->draw_layers();
+        if (fps_count++ < fps_samples) {
+            fps_avg += fps;
+        } else {
+            PLOGD << fps_avg / fps_samples << " FPS";
+            fps_count = 0;
+            fps_avg = 0.0f;
         }
 
-        glfwSwapBuffers(this->win);
         glfwPollEvents();
     }
 
-    glDeleteVertexArrays(1, &vao);
+    for (Shader *shader : this->shaders) {
+        // Begin tearing down GL resources
+        shader->teardown();
+    }
 
+    glDeleteVertexArrays(1, &vao);
     glfwDestroyWindow(this->win);
     glfwTerminate();
 }
