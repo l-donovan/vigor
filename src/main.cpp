@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 
     // Add that layer to the window, using the shader that was
     // created earlier
-    window.add_layer(&base_layer, &base_shader);
+    //window.add_layer(&base_layer, &base_shader);
     window.add_layer(&text_layer, &text_shader);
 
     // Register some callbacks
@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
 
     // Handle all positioning after startup, once the window's dimensions
     // have been determined
-    text_layer.set_font("C:\\Windows\\Fonts\\IBMPlexMono-Regular.ttf", 24);
+    text_layer.set_font("/Users/ldonovan/Library/Fonts/Blex Mono Medium Nerd Font Complete Mono.ttf", 24);
     text_layer.set_text("My name is \"Luke Donovan\"!");
     text_layer.set_position(0.0f, 0.0f);
 

@@ -14,6 +14,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -65,13 +66,12 @@ bool TextLayer::load() {
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
     unsigned int char_count = 128;
-    GLuint* char_textures = (GLuint*)malloc(char_count * sizeof(GLuint));
+    unsigned char *bitmap_data;
+    Character character;
 
     unsigned int current_width = 0;
-    unsigned int atlas_width = 0;
+    unsigned int atlas_width = 512;
     unsigned int atlas_height = 0;
-    unsigned int total_height = 0;
-    unsigned int limit_width = 512;
 
     // Load ASCII charset
     for (unsigned char c = 0; c < char_count; ++c) {
@@ -80,28 +80,10 @@ bool TextLayer::load() {
             continue;
         }
 
-        Character character;
-        GLuint texture;
-        glGenTextures(1, &texture);
-        glBindTexture(GL_TEXTURE_2D, texture);
-
         if (!FT_Get_Char_Index(face, c)) {
-            // Skip over nonprinting characters by assigning them empty textures
-            glTexImage2D(
-                GL_TEXTURE_2D,
-                0,
-                GL_RED,
-                0,
-                0,
-                0,
-                GL_RED,
-                GL_UNSIGNED_BYTE,
-                nullptr
-            );
-
             // Now store character for later use
             character = {
-                texture,
+                nullptr,
                 glm::ivec2(0),
                 glm::ivec2(0),
                 static_cast<unsigned int>(0)
@@ -111,40 +93,28 @@ bool TextLayer::load() {
                 std::cerr << "Glyph rendering error: " << err << std::endl;
             }
 
-            glTexImage2D(
-                GL_TEXTURE_2D,
-                0,
-                GL_RED,
-                face->glyph->bitmap.width,
-                face->glyph->bitmap.rows,
-                0,
-                GL_RED,
-                GL_UNSIGNED_BYTE,
-                face->glyph->bitmap.buffer
-            );
+            // Copy bitmap data to some non-ephemeral location since we won't be writing
+            // it to a texture right away
+            size_t bitmap_size = face->glyph->bitmap.rows * face->glyph->bitmap.pitch;
 
-            // Set texture options
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            // The pitch is given in Bytes, thus bitmap_size is already in Bytes
+            bitmap_data = (unsigned char*) malloc(bitmap_size);
+            memcpy(bitmap_data, face->glyph->bitmap.buffer, bitmap_size);
 
             // Now store character for later use
             character = {
-                texture,
+                bitmap_data,
                 glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
                 glm::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top),
                 static_cast<unsigned int>(face->glyph->advance.x)
             };
         }
 
-        char_textures[c] = texture;
-
         characters.insert(std::pair<char, Character>(c, character));
 
         current_width += character.size.x;
 
-        if (current_width > limit_width) {
+        if (current_width > atlas_width) {
             if (current_width - character.size.x > atlas_width)
                 atlas_width = current_width - character.size.x;
             current_width = character.size.x;
@@ -185,42 +155,38 @@ bool TextLayer::load() {
             y += this->font_height;
         }
 
-        glCopyImageSubData(
-            ch.texture_id,          // Source texture
-            GL_TEXTURE_2D,          // Source type
-            0,                      // Source mipmap level
-            0,                      // Source X
-            0,                      // Source Y
-            0,                      // Source Z
-            this->atlas_texture_id, // Destination texture
-            GL_TEXTURE_2D,          // Destination type
-            0,                      // Destination mipmap level
-            x,                      // Destination X
-            y,                      // Destination Y
-            0,                      // Destination Z
-            ch.size.x,              // Source width
-            ch.size.y,              // Source height
-            1                       // Source depth
+        // Write the character's bitmap to the atlas
+        glTexSubImage2D(
+            GL_TEXTURE_2D,
+            0,
+            x,
+            y,
+            ch.size.x,
+            ch.size.y,
+            GL_RED,
+            GL_UNSIGNED_BYTE,
+            ch.data
         );
 
+        // Calculate the character's UV position in the atlas
         float uv_x1 = float(x) / atlas_width;
         float uv_y1 = float(y) / atlas_height;
         float uv_x2 = float(x + ch.size.x) / atlas_width;
         float uv_y2 = float(y + ch.size.y) / atlas_height;
+
+        characters[key].uv_start = glm::vec2(uv_x1, uv_y1);
+        characters[key].uv_stop = glm::vec2(uv_x2, uv_y2);
 
         std::cout
             << "Character #" << static_cast<unsigned int>(key) << std::endl
             << "  UV1 (" << uv_x1 << ", " << uv_y1 << ")" << std::endl
             << "  UV2 (" << uv_x2 << ", " << uv_y2 << ")" << std::endl;
 
-        characters[key].uv_start = glm::vec2(uv_x1, uv_y1);
-        characters[key].uv_stop = glm::vec2(uv_x2, uv_y2);
+        // We don't need the bitmap data anymore now that it's in a texture atlas
+        free(ch.data);
 
         x += ch.size.x;
     }
-
-    // Discard individual character textures
-    glDeleteTextures(char_count, char_textures);
 
     // Discard freetype objects
     FT_Done_Face(face);
@@ -254,6 +220,35 @@ void TextLayer::recalculate_visibility() {
 
 void TextLayer::update() {
     float last_x = -1.0f;
+
+    vertices.clear();
+    uvs.clear();
+    colors.clear();
+    faces.clear();
+
+    // NOTE: This chunk of commented code is useful for ensuring the texture atlas is being calculated correctly
+
+    //vertices.push_back(glm::vec4(-1.0f, -1.0f, 0.0f, 1.0f));
+    //vertices.push_back(glm::vec4(-1.0f,  1.0f, 0.0f, 1.0f));
+    //vertices.push_back(glm::vec4( 1.0f,  1.0f, 0.0f, 1.0f));
+    //vertices.push_back(glm::vec4( 1.0f, -1.0f, 0.0f, 1.0f));
+
+    //uvs.push_back(glm::vec2(0.0f, 1.0f));
+    //uvs.push_back(glm::vec2(0.0f, 0.0f));
+    //uvs.push_back(glm::vec2(1.0f, 0.0f));
+    //uvs.push_back(glm::vec2(1.0f, 1.0f));
+
+    //colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+    //colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+    //colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+    //colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+
+    //faces.push_back(vertices.size() - 4);
+    //faces.push_back(vertices.size() - 3);
+    //faces.push_back(vertices.size() - 2);
+    //faces.push_back(vertices.size() - 4);
+    //faces.push_back(vertices.size() - 2);
+    //faces.push_back(vertices.size() - 1);
 
     for (unsigned char c : this->text) {
         Character ch = characters[c];
@@ -294,28 +289,6 @@ void TextLayer::update() {
         last_x += advance;
     }
 
-   /* vertices.push_back(glm::vec4(-1.0f, -1.0f, 0.0f, 1.0f));
-    vertices.push_back(glm::vec4(-1.0f, 1.0f, 0.0f, 1.0f));
-    vertices.push_back(glm::vec4(1.0f, 1.0f, 0.0f, 1.0f));
-    vertices.push_back(glm::vec4(1.0f, -1.0f, 0.0f, 1.0f));
-
-    uvs.push_back(glm::vec2(0.0f, 1.0f));
-    uvs.push_back(glm::vec2(0.0f, 0.0f));
-    uvs.push_back(glm::vec2(1.0f, 0.0f));
-    uvs.push_back(glm::vec2(1.0f, 1.0f));
-
-    colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-    colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-    colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-    colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-
-    faces.push_back(vertices.size() - 4);
-    faces.push_back(vertices.size() - 3);
-    faces.push_back(vertices.size() - 2);
-    faces.push_back(vertices.size() - 4);
-    faces.push_back(vertices.size() - 2);
-    faces.push_back(vertices.size() - 1);*/
-
     glBindBuffer(GL_ARRAY_BUFFER, this->vbo_vertices);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec4), vertices.data(), GL_STATIC_DRAW);
 
@@ -340,7 +313,7 @@ void TextLayer::draw() {
     GLuint model_location = glGetUniformLocation(this->shader_id, "model");
     glUniformMatrix4fv(model_location, 1, GL_FALSE, glm::value_ptr(model));
 
-    GLuint texture_location = glGetUniformLocation(this->shader_id, "texture");
+    GLuint texture_location = glGetUniformLocation(this->shader_id, "atlas");
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, this->atlas_texture_id);
     glUniform1i(texture_location, 0);
