@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "engine.h"
 #include "layer.h"
 #include "shader.h"
 
@@ -21,8 +22,10 @@ class Window {
         GLFWwindow *win;
         vector<Shader*> shaders;
 
-        //void on_resize(int width, int height);
-        void (*logic)();
+        void process_events();
+        void draw();
+
+        static Engine engine;
 
         static void (*cursor_pos)(double x_pos, double y_pos);
         static void (*window_size)(int width, int height);
@@ -40,6 +43,7 @@ class Window {
         void register_window_size_fn(void (*fp)(int width, int height));
         void register_key_event_fn(void (*fp)(int key, int scancode, int action, int mods));
         void add_layer(Layer *layer, Shader *shader);
+        void attach_to(Engine engine);
 
         static int width;
         static int height;

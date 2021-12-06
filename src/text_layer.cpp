@@ -9,6 +9,7 @@
 #include <freetype/ftlcdfil.h>
 #include FT_FREETYPE_H
 
+#include "vigor/global.h"
 #include "vigor/text_buffer.h"
 #include "vigor/text_layer.h"
 #include "vigor/window.h"
@@ -20,10 +21,6 @@
 #include <map>
 #include <string>
 #include <vector>
-
-// TODO: Remove after testing
-#include <chrono>
-using namespace std::chrono;
 
 using std::string;
 
@@ -50,18 +47,18 @@ bool TextLayer::load() {
     FT_Library ft;
 
     if (FT_Init_FreeType(&ft)) {
-        std::cerr << "Could not initialize FreeType library" << std::endl;
+        PLOGE << "Could not initialize FreeType library";
         return false;
     }
 
     if (this->font_path.empty()) {
-        std::cerr << "Font path is unset" << std::endl;
+        PLOGE << "Font path is unset";
         return false;
     }
 
     FT_Face face;
     if (FT_New_Face(ft, this->font_path.c_str(), 0, &face)) {
-        std::cerr << "Failed to load font" << std::endl;
+        PLOGE << "Failed to load font";
         return false;
     }
 
@@ -73,10 +70,9 @@ bool TextLayer::load() {
     GLuint* char_textures = (GLuint*)malloc(char_count * sizeof(GLuint));
 
     unsigned int current_width = 0;
-    unsigned int atlas_width = 0;
+    unsigned int atlas_width = 512;
     unsigned int atlas_height = 0;
     unsigned int total_height = 0;
-    unsigned int limit_width = 512;
 
     // Clear existing characters
     characters.clear();
@@ -84,7 +80,7 @@ bool TextLayer::load() {
     // Load ASCII charset
     for (unsigned char c = 0; c < char_count; ++c) {
         if (FT_Load_Char(face, c, FT_LOAD_RENDER)) {
-            std::cerr << "Failed to load glyph #" << static_cast<unsigned int>(c) << std::endl;
+            PLOGE << "Failed to load glyph #" << static_cast<unsigned int>(c);
             continue;
         }
 
@@ -148,11 +144,7 @@ bool TextLayer::load() {
 
         current_width += character.size.x;
 
-        if (current_width > limit_width) {
-            if (current_width - character.size.x > atlas_width) {
-                atlas_width = current_width - character.size.x;
-            }
-
+        if (current_width > atlas_width) {
             current_width = character.size.x;
             atlas_height += this->font_height;
         }
@@ -160,7 +152,7 @@ bool TextLayer::load() {
 
     atlas_height += this->font_height;
 
-    std::cout << "Atlas width: " << atlas_width << "px, height: " << atlas_height << "px" << std::endl;
+    PLOGI << "Atlas width: " << atlas_width << "px, height: " << atlas_height << "px";
 
     // Create atlas
     glGenTextures(1, &this->atlas_texture_id);
@@ -214,10 +206,10 @@ bool TextLayer::load() {
         float uv_x2 = float(x + ch.size.x) / atlas_width;
         float uv_y2 = float(y + ch.size.y) / atlas_height;
 
-        std::cout
-            << "Character #" << static_cast<unsigned int>(key) << std::endl
-            << "  UV1 (" << uv_x1 << ", " << uv_y1 << ")" << std::endl
-            << "  UV2 (" << uv_x2 << ", " << uv_y2 << ")" << std::endl;
+        PLOGD
+            << "Character #" << static_cast<unsigned int>(key)
+            << ": UV1 (" << uv_x1 << ", " << uv_y1 << ")"
+            << ", UV2 (" << uv_x2 << ", " << uv_y2 << ")";
 
         characters[key].uv_start = glm::vec2(uv_x1, uv_y1);
         characters[key].uv_stop = glm::vec2(uv_x2, uv_y2);
@@ -247,9 +239,10 @@ void TextLayer::teardown() {
 void TextLayer::set_text(string text) {
     this->text = text;
     this->update();
-    std::cout << "C: " << this->text.size() << std::endl;
-    std::cout << "V: " << this->vertices.size() << std::endl;
-    std::cout << "F: " << this->faces.size() / 3 << std::endl;
+    PLOGD
+        << "C: " << this->text.size()
+        << ", V: " << this->vertices.size()
+        << ", F: " << this->faces.size() / 3;
 }
 
 void TextLayer::set_position(float x, float y) {
@@ -258,6 +251,8 @@ void TextLayer::set_position(float x, float y) {
 }
 
 void TextLayer::update() {
+    PLOGD << "Update called";
+
     this->vertices.clear();
     this->uvs.clear();
     this->colors.clear();

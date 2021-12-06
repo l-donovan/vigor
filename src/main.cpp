@@ -1,3 +1,4 @@
+#include "vigor/global.h"
 #include "vigor/engine.h"
 #include "vigor/example_layer.h"
 #include "vigor/text_buffer.h"
@@ -25,7 +26,7 @@ ExampleLayer base_layer;
 TextLayer text_layer;
 
 bool file_write_callback(std::streambuf::int_type c) {
-    std::cout << "Callback got: " << static_cast<char>(c) << std::endl;
+    PLOGD << "Callback got: " << static_cast<char>(c);
     return true;
 }
 
@@ -36,16 +37,25 @@ void cursor_pos_changed(double x_pos, double y_pos) {
 }
 
 void window_size_changed(int new_width, int new_height) {
-    std::cout << "W: " << new_width << " H: " << new_height << std::endl;
-}
-
-void key_event(int key, int scancode, int action, int mods) {
-    //test_file << "Key: " << static_cast<unsigned int>(scancode);
-    text_layer.set_font("/home/luke/.local/share/fonts/Blex Mono Nerd Font Complete Mono.ttf", 48);
     text_layer.update();
 }
 
+void key_event(int key, int scancode, int action, int mods) {
+    engine.add_outgoing_event({WindowResizeRequest, {500, 500}});
+}
+
 int main(int argc, char **argv) {
+    // The process for resizing the window when a key is pressed:
+    // 1. glfw gets keypress
+    // 2. glfw sends the keypress to the registered handler
+    // 3. the handler sends a keypress event to the engine
+    // 4. the engine processes the event
+    // 5. the engine sends a resize event to the window
+    // 6. the engine processes the event and asks glfw to resize the window
+
+    static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
+    plog::init(plog::debug, &consoleAppender);
+
     std::ifstream t;
     t.open("/home/luke/projects/vigor/test.txt");
     std::stringstream buffer;
@@ -53,7 +63,8 @@ int main(int argc, char **argv) {
     text_layer.bind_buffer(&test_file);
 
     // Attach the window to the engine
-    engine.attach(&window);
+    // (it's actually happening the other way around behind the scenes)
+    window.attach_to(engine);
 
     // Add that layer to the window, using the shader that was
     // created earlier
