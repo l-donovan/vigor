@@ -221,7 +221,7 @@ void Window::main_loop() {
             } else {
                 // We're behind schedule!
                 auto fps = 1000.0f / (frame_duration_sum / fps_samples);
-                float behind_percent = 100.0f * sleep_duration.count() / (1000.0f / this->fps_target);
+                float behind_percent = -100.0f * sleep_duration.count() / (1000.0f / this->fps_target);
                 PLOGW << "FPS: " << fps << ", behind " << behind_percent << "%";
             }
 

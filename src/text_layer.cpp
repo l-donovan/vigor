@@ -14,6 +14,7 @@
 #include "vigor/text_layer.h"
 #include "vigor/window.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
@@ -22,6 +23,18 @@
 #include <map>
 #include <string>
 #include <vector>
+
+#define VEC2(TARGET, INDEX, V1, V2) {\
+    TARGET[2 * (INDEX)    ] = V1;\
+    TARGET[2 * (INDEX) + 1] = V2;\
+}
+
+#define VEC4(TARGET, INDEX, V1, V2, V3, V4) {\
+    TARGET[4 * (INDEX)    ] = V1;\
+    TARGET[4 * (INDEX) + 1] = V2;\
+    TARGET[4 * (INDEX) + 2] = V3;\
+    TARGET[4 * (INDEX) + 3] = V4;\
+}
 
 using std::string;
 
@@ -32,6 +45,29 @@ void TextLayer::setup() {
     glGenBuffers(1, &this->vbo_uvs);
     glGenBuffers(1, &this->vbo_colors);
     glGenBuffers(1, &this->ibo_faces);
+
+    // Set up all the vectors
+    unsigned int columns = 80;
+    unsigned int rows = 24;
+
+    unsigned int char_count = columns * rows;
+
+    this->vertices = (float*) malloc(2 * sizeof(float) * 4 * char_count);
+    this->uvs = (float*) malloc(2 * sizeof(float) * 4 * char_count);
+    this->colors = (float*) malloc(4 * sizeof(float) * 4 * char_count);
+    this->faces = (GLushort*) malloc(sizeof(GLushort) * 6 * char_count);
+
+    for (unsigned int i = 0; i < char_count; ++i) {
+        // Face 1
+        this->faces[6 * i    ] = 4 * (i + 1) - 4;
+        this->faces[6 * i + 1] = 4 * (i + 1) - 3;
+        this->faces[6 * i + 2] = 4 * (i + 1) - 2;
+
+        // Face 2
+        this->faces[6 * i + 3] = 4 * (i + 1) - 4;
+        this->faces[6 * i + 4] = 4 * (i + 1) - 2;
+        this->faces[6 * i + 5] = 4 * (i + 1) - 1;
+    }
 }
 
 void TextLayer::set_font(string font_path, int font_height) {
@@ -211,8 +247,8 @@ void TextLayer::set_text(string text) {
     this->update();
     PLOGD
         << "C: " << this->text.size()
-        << ", V: " << this->vertices.size()
-        << ", F: " << this->faces.size() / 3;
+        << ", V: " << 4 * this->text.size()
+        << ", F: " << 2 * this->text.size();
 }
 
 void TextLayer::set_position(float x, float y) {
@@ -223,11 +259,6 @@ void TextLayer::set_position(float x, float y) {
 void TextLayer::update() {
     PLOGD << "Update called";
 
-    this->vertices.clear();
-    this->uvs.clear();
-    this->colors.clear();
-    this->faces.clear();
-
     float bearing_x, bearing_y, width, height, advance, x_pos, y_pos;
     float last_x = -1.0f;
     float last_y = 1.0f;
@@ -236,31 +267,15 @@ void TextLayer::update() {
     float space_advance = characters[' '].advance / 64.0f * to_screen_width;
     float font_height = this->font_height * to_screen_height;
 
-    // NOTE: This chunk of commented code is useful for ensuring the texture atlas is being calculated correctly
+    // Set up all the vectors
+    unsigned int columns = 80;
+    unsigned int rows = 24;
 
-    //vertices.push_back(glm::vec4(-1.0f, -1.0f, 0.0f, 1.0f));
-    //vertices.push_back(glm::vec4(-1.0f,  1.0f, 0.0f, 1.0f));
-    //vertices.push_back(glm::vec4( 1.0f,  1.0f, 0.0f, 1.0f));
-    //vertices.push_back(glm::vec4( 1.0f, -1.0f, 0.0f, 1.0f));
+    char_count = std::min(columns * rows, (unsigned int)this->text.length());
 
-    //uvs.push_back(glm::vec2(0.0f, 1.0f));
-    //uvs.push_back(glm::vec2(0.0f, 0.0f));
-    //uvs.push_back(glm::vec2(1.0f, 0.0f));
-    //uvs.push_back(glm::vec2(1.0f, 1.0f));
-
-    //colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-    //colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-    //colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-    //colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-
-    //faces.push_back(vertices.size() - 4);
-    //faces.push_back(vertices.size() - 3);
-    //faces.push_back(vertices.size() - 2);
-    //faces.push_back(vertices.size() - 4);
-    //faces.push_back(vertices.size() - 2);
-    //faces.push_back(vertices.size() - 1);
-
-    for (char c : this->text) {
+    unsigned int idx = 0;
+    for (unsigned int i = 0; i < char_count; ++i) {
+        char c = this->text[i];
         Character ch = characters[c];
 
         // Handle geometry correctly for whitespace characters
@@ -280,7 +295,6 @@ void TextLayer::update() {
         }
 
         advance = ch.advance / 64.0f * to_screen_width;
-
         bearing_x = float(ch.bearing.x) * to_screen_width;
         bearing_y = float(ch.bearing.y) * to_screen_height;
         width = float(ch.size.x) * to_screen_width;
@@ -289,46 +303,36 @@ void TextLayer::update() {
         x_pos = last_x + bearing_x;
         y_pos = last_y - (font_height - bearing_y);
 
-        vertices.push_back(glm::vec4(x_pos,         y_pos - height, 0.0f, 1.0f));
-        vertices.push_back(glm::vec4(x_pos,         y_pos,          0.0f, 1.0f));
-        vertices.push_back(glm::vec4(x_pos + width, y_pos,          0.0f, 1.0f));
-        vertices.push_back(glm::vec4(x_pos + width, y_pos - height, 0.0f, 1.0f));
+        VEC2(vertices, idx + 0, x_pos,         y_pos - height)
+        VEC2(vertices, idx + 1, x_pos,         y_pos)
+        VEC2(vertices, idx + 2, x_pos + width, y_pos)
+        VEC2(vertices, idx + 3, x_pos + width, y_pos - height)
 
-        glm::vec2 uv_start = ch.uv_start;
-        glm::vec2 uv_stop = ch.uv_stop;
+        VEC2(uvs, idx + 0, ch.uv_start.x, ch.uv_stop.y)
+        VEC2(uvs, idx + 1, ch.uv_start.x, ch.uv_start.y)
+        VEC2(uvs, idx + 2, ch.uv_stop.x,  ch.uv_start.y)
+        VEC2(uvs, idx + 3, ch.uv_stop.x,  ch.uv_stop.y)
 
-        uvs.push_back(glm::vec2(uv_start.x, uv_stop.y));
-        uvs.push_back(glm::vec2(uv_start.x, uv_start.y));
-        uvs.push_back(glm::vec2(uv_stop.x, uv_start.y));
-        uvs.push_back(glm::vec2(uv_stop.x, uv_stop.y));
-
-        colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-        colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-        colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-        colors.push_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-
-        faces.push_back(vertices.size() - 4);
-        faces.push_back(vertices.size() - 3);
-        faces.push_back(vertices.size() - 2);
-
-        faces.push_back(vertices.size() - 4);
-        faces.push_back(vertices.size() - 2);
-        faces.push_back(vertices.size() - 1);
+        VEC4(colors, idx + 0, 1.0f, 1.0f, 1.0f, 1.0f)
+        VEC4(colors, idx + 1, 1.0f, 1.0f, 1.0f, 1.0f)
+        VEC4(colors, idx + 2, 1.0f, 1.0f, 1.0f, 1.0f)
+        VEC4(colors, idx + 3, 1.0f, 1.0f, 1.0f, 1.0f)
 
         last_x += advance;
+        idx += 4;
     }
 
     glBindBuffer(GL_ARRAY_BUFFER, this->vbo_vertices);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec4), vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 4 * 2 * char_count * sizeof(float), vertices, GL_STATIC_DRAW);
 
     glBindBuffer(GL_ARRAY_BUFFER, this->vbo_uvs);
-    glBufferData(GL_ARRAY_BUFFER, uvs.size() * sizeof(glm::vec2), uvs.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 4 * 2 * char_count * sizeof(float), uvs, GL_STATIC_DRAW);
 
     glBindBuffer(GL_ARRAY_BUFFER, this->vbo_colors);
-    glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof(glm::vec4), colors.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 4 * 4 * char_count * sizeof(float), colors, GL_STATIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->ibo_faces);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, faces.size() * sizeof(GLushort), faces.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 6 * char_count * sizeof(GLushort), faces, GL_STATIC_DRAW);
 }
 
 void TextLayer::draw() {
@@ -350,7 +354,7 @@ void TextLayer::draw() {
     GLint vertex_position = glGetAttribLocation(this->shader_id, "vertex");
     glEnableVertexAttribArray(vertex_position);
     glBindBuffer(GL_ARRAY_BUFFER, this->vbo_vertices);
-    glVertexAttribPointer(vertex_position, 4, GL_FLOAT, GL_FALSE, 0, 0);
+    glVertexAttribPointer(vertex_position, 2, GL_FLOAT, GL_FALSE, 0, 0);
 
     GLint uv_position = glGetAttribLocation(this->shader_id, "tex_coord");
     glEnableVertexAttribArray(uv_position);
@@ -363,7 +367,7 @@ void TextLayer::draw() {
     glVertexAttribPointer(color_position, 4, GL_FLOAT, GL_FALSE, 0, 0);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->ibo_faces);
-    glDrawElements(GL_TRIANGLES, this->faces.size(), GL_UNSIGNED_SHORT, 0);
+    glDrawElements(GL_TRIANGLES, 6 * char_count, GL_UNSIGNED_SHORT, 0);
 
     glDisableVertexAttribArray(vertex_position);
     glDisableVertexAttribArray(uv_position);

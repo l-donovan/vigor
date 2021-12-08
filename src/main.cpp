@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
     plog::init(plog::debug, &consoleAppender);
 
     std::ifstream t;
-    t.open("/Users/ldonovan/projects/vigor/test.txt");
+    t.open("C:\\Users\\ladbu\\projects\\vigor\\test.txt");
     std::stringstream buffer;
     buffer << t.rdbuf();
     text_layer.bind_buffer(&test_file);
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
 
     // Handle all positioning after startup, once the window's dimensions
     // have been determined
-    text_layer.set_font("/Users/ldonovan/Library/Fonts/Blex Mono Nerd Font Complete Mono-1.ttf", 24);
+    text_layer.set_font("C:\\Windows\\Fonts\\IBMPlexMono-Regular.ttf", 24);
     text_layer.set_text("test\ttest" + buffer.str());
     text_layer.set_position(0.0f, 0.0f);
 

@@ -2,7 +2,7 @@ uniform mat4 model;
 //uniform mat4 view;
 //uniform mat4 projection;
 
-in vec4 vertex;
+in vec2 vertex;
 in vec2 tex_coord;
 in vec4 color;
 
@@ -14,5 +14,5 @@ void main() {
     v_color = color;
 
     //gl_Position = projection * view * model * vertex;
-    gl_Position = model * vertex;
+    gl_Position = model * vec4(vertex, 0.0f, 1.0f);
 }

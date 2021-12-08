@@ -33,10 +33,13 @@ class TextLayer : public Layer {
         float x = 0,
             y = 0;
         string text;
-        vector<glm::vec4> vertices;
-        vector<glm::vec2> uvs;
-        vector<glm::vec4> colors;
-        vector<GLushort> faces;
+
+        unsigned int char_count;
+        float *vertices;
+        float *uvs;
+        float *colors;
+        GLushort *faces;
+
         TextBuffer *buffer = nullptr;
 
         std::string font_path;
