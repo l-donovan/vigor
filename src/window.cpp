@@ -5,9 +5,11 @@
 #include <plog/Log.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "vigor/global.h"
@@ -17,18 +19,14 @@
 #include "vigor/shader.h"
 #include "vigor/window.h"
 
-// `_ROOT_DIR` is set via cmake
-//std::string ROOT_DIR(_ROOT_DIR);
-
 using std::string;
-
-#include <chrono>
-using namespace std::chrono;
 
 Window::Window(string window_title, int initial_width, int initial_height) {
     this->window_title = window_title;
     this->initial_width = initial_width;
     this->initial_height = initial_height;
+
+    this->single_frame_duration = std::chrono::duration<double, std::milli>(1000.0f / this->fps_target);
 }
 
 Window::~Window() {
@@ -36,14 +34,13 @@ Window::~Window() {
 
 void (*Window::cursor_pos)(double x_pos, double y_pos) = NULL;
 void (*Window::window_size)(int width, int height) = NULL;
-void (*Window::key_event)(int key, int scancode, int action, int mods) = NULL;
 Engine Window::engine = Engine();
 
 int Window::width = 0;
 int Window::height = 0;
 
-int fps_count = 0;
-float fps_avg = 0.0f;
+int frame_count = 0;
+float frame_duration_sum = 0.0f;
 int fps_samples = 30;
 
 void Window::attach_to(Engine engine) {
@@ -75,7 +72,6 @@ void Window::global_key_event_callback(GLFWwindow *window, int key, int scancode
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, GLFW_TRUE);
     } else {
-        Window::key_event(key, scancode, action, mods); // TODO: These should eventually be removed
         Window::engine.add_incoming_event({Key, {key, scancode, action, mods}});
     }
 }
@@ -86,10 +82,6 @@ void Window::register_cursor_pos_fn(void (*fp)(double x_pos, double y_pos)) {
 
 void Window::register_window_size_fn(void (*fp)(int width, int height)) {
     Window::window_size = fp;
-}
-
-void Window::register_key_event_fn(void (*fp)(int key, int scancode, int action, int mods)) {
-    Window::key_event = fp;
 }
 
 static void glfw_error_callback(int error, const char *description) {
@@ -160,17 +152,29 @@ void Window::draw() {
 void Window::process_events() {
     // This is where the window acts on the events sent from the engine
     std::optional<Event> event;
+
+    int width, height;
+
     while ((event = Window::engine.pop_outgoing_event()).has_value()) {
-        if (event->type == WindowResizeRequest) {
-            int width = std::get<int>(event->data[0]);
-            int height = std::get<int>(event->data[1]);
+        switch (event->type) {
+        case WindowResizeRequest:
+            width = std::get<int>(event->data[0]);
+            height = std::get<int>(event->data[1]);
+
             glfwSetWindowSize(this->win, width, height);
             glViewport(0, 0, width, height);
 
             PLOGI << "Got window resize request";
             PLOGI << "W: " << width << ", H: " << height;
-        } else {
+            break;
+        case LayerUpdateRequest:
+            for (Shader *shader : this->shaders) {
+                shader->update();
+            }
+            break;
+        default:
             PLOGE << "Got unknown event type";
+            break;
         }
     }
 }
@@ -180,25 +184,58 @@ void Window::main_loop() {
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
 
+    auto start = std::chrono::high_resolution_clock::now();
+    auto stop = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<float, std::milli> sleep_duration;
+    bool ahead;
+
     while (!glfwWindowShouldClose(this->win)) {
+        // Start the timer where we left off
+        start = stop;
+
+        // Process our events, and tell the engine to process its events
         Window::engine.process_events();
         this->process_events();
 
-        auto start = high_resolution_clock::now();
+        // Draw frame and time the draw call
         this->draw();
-        auto stop = high_resolution_clock::now();
-        auto duration = duration_cast<microseconds>(stop - start);
-        auto fps = 1000000.0f / duration.count();
 
-        if (fps_count++ < fps_samples) {
-            fps_avg += fps;
+        // Poll for any new glfw events
+        glfwPollEvents();
+
+        // Calculate the time it took to draw the current frame, and determine if we are ahead
+        // of or behind schedule
+        stop = std::chrono::high_resolution_clock::now();
+        this->current_frame_duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+        sleep_duration = this->single_frame_duration - this->current_frame_duration;
+        ahead = sleep_duration.count() > 0;
+
+        if (frame_count++ < fps_samples) {
+            frame_duration_sum += this->current_frame_duration.count();
         } else {
-            PLOGD << fps_avg / fps_samples << " FPS";
-            fps_count = 0;
-            fps_avg = 0.0f;
+            if (ahead) {
+                // We're ahead of schedule! (Or at least on time)
+                float ahead_percent = 100.0f * sleep_duration.count() / (1000.0f / this->fps_target);
+                PLOGD << "FPS: " << this->fps_target << ", ahead " << ahead_percent << "%";
+            } else {
+                // We're behind schedule!
+                auto fps = 1000.0f / (frame_duration_sum / fps_samples);
+                float behind_percent = 100.0f * sleep_duration.count() / (1000.0f / this->fps_target);
+                PLOGW << "FPS: " << fps << ", behind " << behind_percent << "%";
+            }
+
+            frame_count = 0;
+            frame_duration_sum = 0.0f;
         }
 
-        glfwPollEvents();
+        // Only sleep if we're ahead of schedule
+        if (ahead) {
+            std::this_thread::sleep_for(sleep_duration);
+        }
+
+        // Reset the clock after any sleeping overhead or actual sleeping
+        stop = std::chrono::high_resolution_clock::now();
     }
 
     for (Shader *shader : this->shaders) {

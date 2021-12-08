@@ -22,6 +22,7 @@ void Engine::process_events() {
         case WindowResize:
             PLOGI << "Got window resize event";
             PLOGI << "W: " << std::get<int>(event->data[0]) << ", H: " << std::get<int>(event->data[1]);
+            this->add_outgoing_event({LayerUpdateRequest, {}});
             break;
         case Key:
             this->add_outgoing_event({WindowResizeRequest, {500, 500}});

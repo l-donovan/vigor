@@ -27,6 +27,8 @@ class TextLayer : public Layer {
             vbo_uvs = 0,
             ibo_faces = 0;
         GLuint atlas_texture_id = 0;
+        unsigned int atlas_width = 0;
+        unsigned int atlas_height = 0;
         float scale = 0.5f;
         float x = 0,
             y = 0;

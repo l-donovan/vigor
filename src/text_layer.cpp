@@ -72,8 +72,8 @@ bool TextLayer::load() {
     Character character;
 
     unsigned int current_width = 0;
-    unsigned int atlas_width = 512;
-    unsigned int atlas_height = 0;
+    atlas_width = 512;
+    atlas_height = 0;
 
     // Clear existing characters
     characters.clear();
@@ -231,10 +231,10 @@ void TextLayer::update() {
     float bearing_x, bearing_y, width, height, advance, x_pos, y_pos;
     float last_x = -1.0f;
     float last_y = 1.0f;
-    float font_height = 2.0f * this->font_height / Window::height;
     float to_screen_width = 2.0f / Window::width;
     float to_screen_height = 2.0f / Window::height;
     float space_advance = characters[' '].advance / 64.0f * to_screen_width;
+    float font_height = this->font_height * to_screen_height;
 
     // NOTE: This chunk of commented code is useful for ensuring the texture atlas is being calculated correctly
 
@@ -263,8 +263,6 @@ void TextLayer::update() {
     for (char c : this->text) {
         Character ch = characters[c];
 
-        width = ch.size.x * to_screen_width;
-
         // Handle geometry correctly for whitespace characters
         if (c == '\n') {
             last_y -= font_height;
@@ -282,9 +280,11 @@ void TextLayer::update() {
         }
 
         advance = ch.advance / 64.0f * to_screen_width;
-        bearing_x = ch.bearing.x * to_screen_width;
-        bearing_y = ch.bearing.y * to_screen_height;
-        height = ch.size.y * to_screen_height;
+
+        bearing_x = float(ch.bearing.x) * to_screen_width;
+        bearing_y = float(ch.bearing.y) * to_screen_height;
+        width = float(ch.size.x) * to_screen_width;
+        height = float(ch.size.y) * to_screen_height;
 
         x_pos = last_x + bearing_x;
         y_pos = last_y - (font_height - bearing_y);

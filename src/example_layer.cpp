@@ -40,12 +40,6 @@ void ExampleLayer::setup() {
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, faces.size() * sizeof(GLushort), faces.data(), GL_STATIC_DRAW);
 }
 
-void ExampleLayer::teardown() {
-    glDeleteBuffers(1, &this->vbo_vertices);
-    glDeleteBuffers(1, &this->vbo_colors);
-    glDeleteBuffers(1, &this->ibo_faces);
-}
-
 void ExampleLayer::draw() {
     // update the uniform color
     //float time_val = glfwGetTime();
@@ -68,4 +62,13 @@ void ExampleLayer::draw() {
 
     glDisableVertexAttribArray(vertex_position);
     glDisableVertexAttribArray(color_position);
+}
+
+void ExampleLayer::update() {
+}
+
+void ExampleLayer::teardown() {
+    glDeleteBuffers(1, &this->vbo_vertices);
+    glDeleteBuffers(1, &this->vbo_colors);
+    glDeleteBuffers(1, &this->ibo_faces);
 }

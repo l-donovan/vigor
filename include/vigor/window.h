@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
 
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,10 @@ class Window {
         GLFWwindow *win;
         vector<Shader*> shaders;
 
+        int fps_target = 60;
+        std::chrono::duration<float, std::milli> single_frame_duration;
+        std::chrono::duration<float, std::milli> current_frame_duration;
+
         void process_events();
         void draw();
 
@@ -29,7 +34,6 @@ class Window {
 
         static void (*cursor_pos)(double x_pos, double y_pos);
         static void (*window_size)(int width, int height);
-        static void (*key_event)(int key, int scancode, int action, int mods);
         static void global_cursor_pos_callback(GLFWwindow *window, double x_pos, double y_pos);
         static void global_window_size_callback(GLFWwindow *window, int width, int height);
         static void global_key_event_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
@@ -41,7 +45,6 @@ class Window {
         void main_loop();
         void register_cursor_pos_fn(void (*fp)(double x_pos, double y_pos));
         void register_window_size_fn(void (*fp)(int width, int height));
-        void register_key_event_fn(void (*fp)(int key, int scancode, int action, int mods));
         void add_layer(Layer *layer, Shader *shader);
         void attach_to(Engine engine);
 

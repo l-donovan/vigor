@@ -113,6 +113,12 @@ void Shader::use() {
     glUseProgram(this->id);
 }
 
+void Shader::update() {
+    for (Layer *layer : layers) {
+        layer->update();
+    }
+}
+
 void Shader::teardown() {
     for (Layer *layer : layers) {
         layer->teardown();

@@ -9,6 +9,7 @@ enum EventType {
     Key,
     CursorPosition,
     WindowResizeRequest,
+    LayerUpdateRequest,
 };
 
 using variant_t = std::variant<int, float, double>;

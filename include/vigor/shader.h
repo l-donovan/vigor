@@ -24,6 +24,7 @@ class Shader {
         void setup();
         void compile();
         void use();
+        void update();
         void teardown();
         void set_bool(const string name, bool value) const;
         void set_int(const string name, int value) const;

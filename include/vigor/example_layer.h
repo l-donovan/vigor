@@ -9,5 +9,6 @@ class ExampleLayer : public Layer {
     public:
         void setup();
         void draw();
+        void update();
         void teardown();
 };

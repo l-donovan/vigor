@@ -37,11 +37,7 @@ void cursor_pos_changed(double x_pos, double y_pos) {
 }
 
 void window_size_changed(int new_width, int new_height) {
-    text_layer.update();
-}
-
-void key_event(int key, int scancode, int action, int mods) {
-    engine.add_outgoing_event({WindowResizeRequest, {500, 500}});
+    //text_layer.update();
 }
 
 int main(int argc, char **argv) {
@@ -57,7 +53,7 @@ int main(int argc, char **argv) {
     plog::init(plog::debug, &consoleAppender);
 
     std::ifstream t;
-    t.open("/home/luke/projects/vigor/test.txt");
+    t.open("/Users/ldonovan/projects/vigor/test.txt");
     std::stringstream buffer;
     buffer << t.rdbuf();
     text_layer.bind_buffer(&test_file);
@@ -74,14 +70,13 @@ int main(int argc, char **argv) {
     // Register some callbacks
     window.register_cursor_pos_fn(cursor_pos_changed);
     window.register_window_size_fn(window_size_changed);
-    window.register_key_event_fn(key_event);
 
     // Startup the window, compiling the shaders and initializing buffers
     window.startup();
 
     // Handle all positioning after startup, once the window's dimensions
     // have been determined
-    text_layer.set_font("/home/luke/.local/share/fonts/Blex Mono Nerd Font Complete Mono.ttf", 24);
+    text_layer.set_font("/Users/ldonovan/Library/Fonts/Blex Mono Nerd Font Complete Mono-1.ttf", 24);
     text_layer.set_text("test\ttest" + buffer.str());
     text_layer.set_position(0.0f, 0.0f);
 
