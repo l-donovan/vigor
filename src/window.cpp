@@ -32,9 +32,7 @@ Window::Window(string window_title, int initial_width, int initial_height) {
 Window::~Window() {
 }
 
-void (*Window::cursor_pos)(double x_pos, double y_pos) = NULL;
-void (*Window::window_size)(int width, int height) = NULL;
-Engine Window::engine = Engine();
+Engine* Window::engine = nullptr;
 
 int Window::width = 0;
 int Window::height = 0;
@@ -43,7 +41,7 @@ int frame_count = 0;
 float frame_duration_sum = 0.0f;
 int fps_samples = 30;
 
-void Window::attach_to(Engine engine) {
+void Window::attach(Engine *engine) {
     Window::engine = engine;
 }
 
@@ -54,8 +52,7 @@ void Window::global_cursor_pos_callback(GLFWwindow *window, double x_pos, double
     if (x_adj < 0.0 || x_adj > 1.0 || y_adj < 0.0 || y_adj > 1.0)
         return;
 
-    Window::cursor_pos(x_adj, y_adj);
-    Window::engine.add_incoming_event({CursorPosition, {x_pos, y_pos}});
+    Window::engine->add_incoming_event({CursorPosition, {x_adj, y_adj}});
 }
 
 void Window::global_window_size_callback(GLFWwindow *window, int width, int height) {
@@ -64,24 +61,15 @@ void Window::global_window_size_callback(GLFWwindow *window, int width, int heig
     Window::width = width;
     Window::height = height;
 
-    Window::window_size(width, height); // TODO: These should eventually be removed
-    Window::engine.add_incoming_event({WindowResize, {width, height}});
+    Window::engine->add_incoming_event({WindowResize, {width, height}});
 }
 
 void Window::global_key_event_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, GLFW_TRUE);
     } else {
-        Window::engine.add_incoming_event({Key, {key, scancode, action, mods}});
+        Window::engine->add_incoming_event({Key, {key, scancode, action, mods}});
     }
-}
-
-void Window::register_cursor_pos_fn(void (*fp)(double x_pos, double y_pos)) {
-    Window::cursor_pos = fp;
-}
-
-void Window::register_window_size_fn(void (*fp)(int width, int height)) {
-    Window::window_size = fp;
 }
 
 static void glfw_error_callback(int error, const char *description) {
@@ -89,6 +77,11 @@ static void glfw_error_callback(int error, const char *description) {
 }
 
 bool Window::startup() {
+    // First we want to check if the attached Engine needs us to do anything.
+    // Any GL/GLFW-specific events will absolutely break things, however, since
+    // neither are initialized at this point.
+    this->process_events();
+
     glfwSetErrorCallback(glfw_error_callback);
 
     if (!glfwInit()) {
@@ -155,7 +148,7 @@ void Window::process_events() {
 
     int width, height;
 
-    while ((event = Window::engine.pop_outgoing_event()).has_value()) {
+    while ((event = Window::engine->pop_outgoing_event()).has_value()) {
         switch (event->type) {
         case WindowResizeRequest:
             width = std::get<int>(event->data[0]);
@@ -170,6 +163,12 @@ void Window::process_events() {
         case LayerUpdateRequest:
             for (Shader *shader : this->shaders) {
                 shader->update();
+            }
+            break;
+        case LayerModifyRequest:
+            PLOGD << "Got layer modify request";
+            if (std::get<int>(event->data[0]) == EVENT_LAYER_ADD) {
+                this->add_layer(std::get<Layer*>(event->data[1]), std::get<Shader*>(event->data[2]));
             }
             break;
         default:
@@ -195,7 +194,7 @@ void Window::main_loop() {
         start = stop;
 
         // Process our events, and tell the engine to process its events
-        Window::engine.process_events();
+        Window::engine->process_events();
         this->process_events();
 
         // Draw frame and time the draw call

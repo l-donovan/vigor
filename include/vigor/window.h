@@ -30,10 +30,8 @@ class Window {
         void process_events();
         void draw();
 
-        static Engine engine;
+        static Engine *engine;
 
-        static void (*cursor_pos)(double x_pos, double y_pos);
-        static void (*window_size)(int width, int height);
         static void global_cursor_pos_callback(GLFWwindow *window, double x_pos, double y_pos);
         static void global_window_size_callback(GLFWwindow *window, int width, int height);
         static void global_key_event_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
@@ -43,10 +41,8 @@ class Window {
 
         bool startup();
         void main_loop();
-        void register_cursor_pos_fn(void (*fp)(double x_pos, double y_pos));
-        void register_window_size_fn(void (*fp)(int width, int height));
         void add_layer(Layer *layer, Shader *shader);
-        void attach_to(Engine engine);
+        void attach(Engine *engine);
 
         static int width;
         static int height;

@@ -18,6 +18,8 @@ class Engine {
         Engine();
         ~Engine();
 
+        void pre_window_startup();
+        void post_window_startup();
         void process_events();
 
         void add_incoming_event(Event event);
