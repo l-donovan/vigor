@@ -9,7 +9,7 @@
 
 using std::string;
 
-struct Character {
+struct Glyph {
     void *data;              // Texture data
     glm::ivec2   size;       // Size of glyph
     glm::ivec2   bearing;    // Offset from baseline to left/top of glyph
@@ -31,13 +31,16 @@ class TextLayer : public Layer {
 
         float x = 0.0f;
         float y = 0.0f;
+        float last_y = 1.0f;
+        int vertical_char_offset = 0;
         float scale = 0.5f;
         string text;
 
         unsigned int columns = 80;
         unsigned int rows = 24;
         unsigned int char_count = 80 * 24;
-        unsigned int start_line = 0;
+        int start_line = 0;
+        int last_start_line = 0;
         float *vertices = nullptr;
         float *uvs = nullptr;
         float *colors = nullptr;
@@ -47,20 +50,24 @@ class TextLayer : public Layer {
 
         std::string font_path;
         int font_height = 0;
+
+        int top_line_idx = 0;
+        unsigned int bottom_line_idx = 0;
     public:
         TextLayer() {};
 
         void set_font(string font_path, int font_height);
+        bool rasterize_font();
         void setup();
+        void update();
         void draw();
         void teardown();
-        void update();
-        bool load();
         void set_text(string text);
         void set_position(float x, float y);
         void calculate_dimensions();
         void allocate_attribute_buffers();
-        void bind_buffer(TextBuffer *buffer);
+        void calculate_attribute_buffers();
+        void bind_text_buffer(TextBuffer *buffer);
 
         void set_start_line(unsigned int line_num);
         unsigned int get_start_line();

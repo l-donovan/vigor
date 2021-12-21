@@ -50,7 +50,7 @@ void Engine::pre_window_startup() {
 
     // Load some lorem ipsum text and bind the text buffer to our text layer
     buffer.load_file(ROOT_DIR + "/test.txt");
-    text_layer.bind_buffer(&buffer);
+    text_layer.bind_text_buffer(&buffer);
 }
 
 // This must be called after the window has had its `startup` called
@@ -64,6 +64,16 @@ void Engine::post_window_startup() {
 #endif
 
     text_layer.set_position(0.0f, 0.0f);
+}
+
+void Engine::handle_key_event(int key, int scancode, int action, int mods) {
+    if (key == GLFW_KEY_DOWN && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        text_layer.set_start_line(text_layer.get_start_line() + 1);
+        this->add_outgoing_event({LayerUpdateRequest, {}});
+    } else if (key == GLFW_KEY_UP && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+        text_layer.set_start_line(text_layer.get_start_line() - 1);
+        this->add_outgoing_event({LayerUpdateRequest, {}});
+    }
 }
 
 void Engine::process_events() {
@@ -80,9 +90,12 @@ void Engine::process_events() {
             this->add_outgoing_event({LayerUpdateRequest, {}});
             break;
         case Key:
-            // Modify buffer as needed
-            text_layer.set_start_line(text_layer.get_start_line() + 1);
-            this->add_outgoing_event({LayerUpdateRequest, {}});
+            this->handle_key_event(
+                std::get<int>(event->data[0]),
+                std::get<int>(event->data[1]),
+                std::get<int>(event->data[2]),
+                std::get<int>(event->data[3])
+            );
             break;
         case CursorPosition:
             text_layer.set_position(

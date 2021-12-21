@@ -70,13 +70,16 @@ std::optional<std::string> TextBuffer::read_next_line() {
     }
 
     std::string line;
+
     if (getline(this->stream, line)) {
         this->start_line++;
-        if (this->line_positions.size() < this->start_line) {
+
+        if (this->line_positions.size() <= this->start_line) {
             this->line_positions.push_back(this->stream.tellg());
         } else {
             this->line_positions[this->start_line] = this->stream.tellg();
         }
+
         return line;
     }
 
@@ -84,13 +87,16 @@ std::optional<std::string> TextBuffer::read_next_line() {
 }
 
 void TextBuffer::seek_line(unsigned int line_num) {
-    PLOGD << "Seeking line" << line_num;
+    PLOGD << "Seeking line " << line_num;
     this->stream.clear();
 
     if (this->line_positions.size() <= line_num) {
+        this->start_line = this->line_positions.size() - 1;
+        this->stream.seekg(this->line_positions[this->start_line]);
         while (this->read_next_line().has_value() && this->start_line < line_num);
     } else {
-        this->stream.seekg(this->line_positions[line_num]);
+        this->start_line = line_num;
+        this->stream.seekg(this->line_positions[this->start_line]);
     }
 }
 

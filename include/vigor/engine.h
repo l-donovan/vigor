@@ -14,6 +14,9 @@ class Engine {
         std::queue<Event> outgoing_event_queue;
 
         std::optional<Event> pop_incoming_event();
+
+        // Internal handlers
+        void handle_key_event(int key, int scancode, int action, int mods);
     public:
         Engine();
         ~Engine();
